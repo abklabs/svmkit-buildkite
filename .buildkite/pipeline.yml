@@ -1,0 +1,67 @@
+x-default-agents: &default-agents
+  agents:
+    queue: "default"
+
+x-test-template: &test-template
+  <<: *default-agents
+  depends_on: ["build"]
+  env:
+    PULUMI_ACCESS_TOKEN: "${PULUMI_ACCESS_TOKEN}"
+    AWS_DEFAULT_REGION: "us-west-2"
+  command: |
+    git clone https://github.com/abklabs/svmkit-examples ./svmkit-examples
+  
+    if [[ -n "${SVMKIT_DIR:-}" || -n "${PULUMI_SVMKIT_DIR:-}" ]]; then
+      echo "Downloading Pulumi SDK and provider plugin artifacts"
+      buildkite-agent artifact download pulumi-artifacts.tgz .
+      tar zxf pulumi-artifacts.tgz
+      export PATH="$PWD/pulumi-svmkit/bin:$PATH"
+    fi
+
+    mkdir -p svmkit pulumi-svmkit
+    . .buildkite/cloud-creds.sh
+
+    export PULUMI_ACCESS_TOKEN=$(buildkite-agent secret get PULUMI_ACCESS_TOKEN)
+
+    ./tests/test-svmkit "$$TEST_NAME"
+
+env:
+  SVMKIT_EXAMPLES_DIR: "./svmkit-examples"
+  PULUMI_ACCESS_TOKEN: "${PULUMI_ACCESS_TOKEN}"
+  AWS_DEFAULT_REGION: "us-west-2"
+
+steps:
+  - key: build
+    label: ":rocket: Build svmkit and pulumi-svmkit"
+    if: build.env("SVMKIT_DIR") != "" || build.env("PULUMI_SVMKIT_DIR") != ""
+    <<: *default-agents
+
+    command: |
+      git clone https://github.com/abklabs/svmkit-examples ./svmkit-examples
+      git clone https://github.com/abklabs/svmkit ./svmkit
+      git clone https://github.com/abklabs/pulumi-svmkit ./pulumi-svmkit
+      chmod +x ./tests/test-svmkit
+      echo Running test-svmkit --setup-only
+      ./tests/test-svmkit --setup-only
+      tar -zcf pulumi-artifacts.tgz pulumi-svmkit/sdk pulumi-svmkit/bin
+
+    artifact_paths:
+      - pulumi-artifacts.tgz
+
+  - label: ":heavy_check_mark: Test aws-network-spe-py"
+    env:
+      CLOUD: aws
+      TEST_NAME: "test-aws-network-spe-py"
+    <<: *test-template
+
+  - label: ":heavy_check_mark: Test aws-validator-fd-ts"
+    env:
+      CLOUD: aws
+      TEST_NAME: "test-aws-validator-fd-ts"
+    <<: *test-template
+
+  - label: ":heavy_check_mark: Test aws-validator-agave-ts"
+    env:
+      CLOUD: aws
+      TEST_NAME: "test-aws-validator-agave-ts"
+    <<: *test-template
