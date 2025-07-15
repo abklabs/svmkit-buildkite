@@ -218,7 +218,15 @@ section::end() {
 
 example::test() {
 	(
-		local -n config=$1 # name reference (bash 4.3+)
+	    on_error() {
+		local stack="$1"
+		if $CLEANUP_ON_FAILURE; then
+		    log::error "Error — cleaning up stack '$stack'"
+		    pulumi::run down --yes || log::error "❌ pulumi down failed"
+		fi
+	    }
+	    local -n config=$1 # name reference (bash 4.3+)
+		trap 'on_error $stack_name' ERR
 		local example="${config[example]}"
 		local stack_name="test-$example"
 
@@ -384,6 +392,9 @@ for arg in "$@"; do
 	case "$arg" in
 	--setup-only)
 		SETUP_ONLY=true
+		;;
+	--cleanup-on-failure)
+		CLEANUP_ON_FAILURE=true
 		;;
 	*)
 		_new_args+=("$arg")
