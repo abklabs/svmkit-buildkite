@@ -8,3 +8,4 @@ lint:
 format:
 	shfmt -w .githooks/*
 	shfmt -w .buildkite/*sh
+	shfmt -w tests/test-svmkit
