@@ -6,9 +6,9 @@ opsh::version::require v0.7.0
 lib::import step-runner command
 lib::import test-harness
 
+: "${PULUMI_ORG:='PULUMI_ORG-NOT-SET'}"
 : "${PULUMI_COLOR:=always}"
 : "${BRING_UP_STACK:=true}"
-: "${NODE_COUNT:=1}"
 
 : "${GOOGLE_PROJECT:=svmkit}"
 : "${GOOGLE_REGION:=us-central1}"
@@ -153,16 +153,16 @@ example::test::ufw_status_allows_expected_ports() {
 	local missing=0
 	for line in "${expected_lines[@]}"; do
 		if ! grep -Fq "$line" <<<"$output"; then
-			log::error "❌ Missing expected rule: '$line'"
+			log::error "Missing expected rule: '$line'"
 			missing=1
 		fi
 	done
 
 	if [[ $missing -eq 0 ]]; then
-		log::info "✅ All expected UFW rules are present."
+		log::info "All expected UFW rules are present."
 		return 0
 	else
-		log::error "❌ Some expected UFW rules are missing."
+		log::error "Some expected UFW rules are missing."
 		return 1
 	fi
 }
@@ -171,7 +171,7 @@ example::test::journal_logging() {
 	local output
 	# grab the journal entries for the service
 	output=$(./ssh-to-host 0 "journalctl -eu svmkit-*-validator.service") || {
-		log::error "❌ ${FUNCNAME[0]}: journalctl command failed"
+		log::error "${FUNCNAME[0]}: journalctl command failed"
 		return 1
 	}
 
@@ -179,18 +179,18 @@ example::test::journal_logging() {
 
 	# # check for the “Started …” line
 	# if ! grep -q "Started svmkit-.*validator.service" <<<"$Output"; then
-	#     log::error "❌ ${FUNCNAME[0]}: Missing ‘Started svmkit-.*.service’ entry"
+	#     log::error "${FUNCNAME[0]}: Missing ‘Started svmkit-.*.service’ entry"
 	#     missing=1
 	# fi
 
 	# check for any lines containing INFO
 	if ! grep -Eq 'INFO ' <<<"$output"; then
-		log::error "❌ ${FUNCNAME[0]}: No 'INFO' line found for svmkit-*-validator.service"
+		log::error "${FUNCNAME[0]}: No 'INFO' line found for svmkit-*-validator.service"
 		missing=1
 	fi
 
 	if [[ $missing -eq 0 ]]; then
-		log::info "✅ Journalctl contains an 'INFO' line for svmkit-*-validator.service"
+		log::info "Journalctl contains an 'INFO' line for svmkit-*-validator.service"
 		return 0
 	else
 		return 1
@@ -209,7 +209,6 @@ section::begin() {
 }
 
 section::end() {
-	local header="$*"
 	if [[ -n "${BUILDKITE:-}" ]]; then
 		# Start collapsed section in Buildkite
 		echo "^^^ +++"
@@ -218,49 +217,35 @@ section::end() {
 
 example::test() {
 	(
-	    on_error() {
-		local stack="$1"
-		if $CLEANUP_ON_FAILURE; then
-		    log::error "Error — cleaning up stack '$stack'"
-		    pulumi::run down --yes || log::error "❌ pulumi down failed"
-		fi
-	    }
-	    local -n config=$1 # name reference (bash 4.3+)
-		trap 'on_error $stack_name' ERR
+		on_error() {
+			local stack="$1"
+			if [[ -n "${CLEANUP_ON_FAILURE:-}" ]]; then
+				log::error "Error — cleaning up stack '$stack'"
+				pulumi::run down --yes || log::error "pulumi down failed"
+			fi
+		}
+		local -n config=$1 # name reference (bash 4.3+)
 		local example="${config[example]}"
-		local stack_name="test-$example"
+		local stack_name="${PULUMI_ORG}/test-${example}"
+		trap 'on_error $stack_name' ERR
 
-		# # redirect output to file but display any INFO lines to console.
-		# if "$DEBUG" == ""; then
-		#     exec > >(tee "$example.log" | awk '
-		#       {
-		#        # Strip ANSI escape codes for pattern matching
-		# 	line = $0
-
-		# 	gsub(/\x1b\[[0-9;]*m/, "", line)
-		# 	 # Skip lines starting with + or -
-		# 	if (line ~ /^[[:space:]]*[+-]/) next
-
-		# 	 # Print original (colorized) line if it matches INFO or WARN
-		# 	if (line ~ /INFO|WARN|ERROR/) print
-		#       }
-		#     ') 2>&1
-		#     log::info "Logging $example output to '$example.log'"
-		# fi
 		log::info "Starting test for $example"
 
 		cd "$SVMKIT_EXAMPLES_DIR/$example"
 		section::begin "Creating stack '$stack_name'"
-		pulumi::run stack init $stack_name || {
+		pulumi::run stack init "$stack_name" || {
 			log::warn "Stack '$stack_name' already exists"
-			pulumi::run stack select $stack_name
+			pulumi::run stack select "$stack_name"
 		}
 
 		if [[ -v config[setup] ]]; then
 			setup="${config[setup]}"
 			"$setup"
 		fi
-		pulumi::run config set node:count "$NODE_COUNT"
+		if [ ! -z "${VOLUME_IOPS+x}" ]; then
+			pulumi::run config set node:volumeIOPS "$VOLUME_IOPS"
+		fi
+
 		pulumi::run preview
 		section::end
 
@@ -273,10 +258,10 @@ example::test() {
 		tmp=$(mktemp)
 		testing::run 2>&1 | tee "$tmp"
 		if grep -q 'ERROR: ' "$tmp"; then
-			log::error "❌ Some tests failed"
+			log::error "Some tests failed"
 			exit 1
 		else
-			log::info "✅ All tests passed"
+			log::info "All tests passed"
 		fi
 		rm "$tmp"
 		section::end
@@ -286,7 +271,7 @@ example::test() {
 		section::end
 
 		log::info "Removing stack '$stack_name'"
-		pulumi::run stack rm --yes $stack_name
+		pulumi::run stack rm --yes "$stack_name"
 
 		# Run any cleanup if defined.
 		if [[ -v config[cleanup] ]]; then
@@ -303,10 +288,10 @@ gcloud::check_auth() {
 	account=$(gcloud auth list --filter=status:ACTIVE --format="value(account)")
 
 	if [[ -z "$account" ]]; then
-		echo "❌ Not authenticated to Google Cloud."
+		echo "Not authenticated to Google Cloud."
 		return 1
 	else
-		echo "✅ Authenticated as: $account"
+		echo "Authenticated as: $account"
 		return 0
 	fi
 }
@@ -324,13 +309,11 @@ testing::register example::test::journal_logging
 
 declare -A example_config_ts=(
 	["setup"]=example::setup::ts
-	["node_count"]="$NODE_COUNT"
 	["cleanup"]=example::cleanup::ts
 )
 
 declare -A example_config_py=(
 	["setup"]=example::setup::py
-	["node_count"]="$NODE_COUNT"
 	["cleanup"]=example::cleanup::py
 )
 
@@ -449,7 +432,7 @@ elif (($# > 0)); then
 			log::info "▶ Running step '$step_name'"
 			$fn
 		else
-			log::error "❌ No step named '$step_name'"
+			log::error "No step named '$step_name'"
 			log::info "Valid steps are:"
 			for s in "${_valid_steps[@]}"; do
 				log::info "  • $s"
