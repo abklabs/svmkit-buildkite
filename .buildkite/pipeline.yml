@@ -8,6 +8,9 @@ x-test-template: &test-template
   env:
     PULUMI_ACCESS_TOKEN: "${PULUMI_ACCESS_TOKEN}"
     AWS_DEFAULT_REGION: "us-west-2"
+  concurrency: 1
+  concurrency_group: pulumi-testing
+
   command: |
     git clone https://github.com/abklabs/svmkit-examples ./svmkit-examples
   
