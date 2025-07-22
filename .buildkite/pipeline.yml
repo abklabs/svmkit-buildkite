@@ -44,6 +44,11 @@ steps:
       git clone https://github.com/abklabs/svmkit-examples ./svmkit-examples
       git clone https://github.com/abklabs/svmkit ./svmkit
       git clone https://github.com/abklabs/pulumi-svmkit ./pulumi-svmkit
+
+      for d in svmkit pulumi-svmkit ; do
+        git -C "$$d" config core.hooksPath .githooks
+      done
+
       chmod +x ./tests/test-svmkit
       echo Running test-svmkit --setup-only
       ./tests/test-svmkit --setup-only
