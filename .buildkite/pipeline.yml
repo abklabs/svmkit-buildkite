@@ -58,6 +58,12 @@ steps:
       TEST_NAME: "test-aws-network-spe-py"
     <<: *test-template
 
+  - label: ":heavy_check_mark: Test gcp-network-spe-ts"
+    env:
+      CLOUD: gcp
+      TEST_NAME: "test-gcp-network-spe-ts"
+    <<: *test-template
+
   - label: ":heavy_check_mark: Test aws-validator-fd-ts"
     env:
       CLOUD: aws
