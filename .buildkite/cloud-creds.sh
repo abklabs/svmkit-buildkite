@@ -19,6 +19,17 @@ gcp)
 	: "${GOOGLE_REGION:=us-central1}"
 	: "${GOOGLE_ZONE:=${GOOGLE_REGION}-a}"
 
+	GCP_SA_KEY="$(buildkite-agent secret get GCP_SA_KEY)"
+	mkdir -p /secrets
+	echo "$GCP_SA_KEY" >/secrets/sa-key.json
+	chmod 600 /secrets/sa-key.json
+	GOOGLE_APPLICATION_CREDENTIALS=/secrets/sa-key.json
+	gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
+	gcloud config set project "$GOOGLE_PROJECT"
+	export GOOGLE_PROJECT \
+		GOOGLE_REGION \
+		GOOGLE_ZONE \
+		GOOGLE_APPLICATION_CREDENTIALS
 	;;
 
 *)
