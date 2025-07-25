@@ -1,3 +1,10 @@
+ARCH 		?=	amd64
+TAG 		?=	svmkit/agent/$(ARCH)
+PLATFORMS 	?=	linux/amd64,linux/arm64
+BUILD_CONTEXT 	?=	.
+DOCKERFILE 	?=	Dockerfile
+
+.PHONY: docker docker-image check lint format
 
 check: lint
 
@@ -11,6 +18,20 @@ format:
 	shfmt -w .buildkite/*sh
 	shfmt -w tests/test-svmkit
 	shfmt -w bin/check-env
+
+docker-run: docker-image
+	docker run --platform=linux/$(ARCH) $(TAG) start --tags "queue=$(USER)" --token "$(BUILDKITE_API_TOKEN)"
+
+docker-build:
+	docker build --platform=linux/$(ARCH) -t $(TAG) -f $(DOCKERFILE) $(BUILD_CONTEXT)
+
+# Buildx multi-platform build (does NOT push by default)
+docker-buildx:
+	docker buildx build \
+		--platform=$(PLATFORMS) \
+		-t $(TAG) \
+		-f $(DOCKERFILE) \
+		$(BUILD_CONTEXT)
 
 .env-checked: bin/check-env
 	./bin/check-env
