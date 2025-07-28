@@ -9,7 +9,9 @@ x-test-template: &test-template
   concurrency_group: pulumi-testing
 
   command: |
+
     git clone https://github.com/abklabs/solana-lab ./solana-lab
+    [[ -n "$${SOLANA_LAB_BRANCH:-}" ]] && git -C ./solana-lab checkout "$$SOLANA_LAB_BRANCH"
 
     # Setup ssh for private repo
     GITHUB_KEY_FILE=$HOME/.ssh/id_rsa
@@ -26,6 +28,7 @@ x-test-template: &test-template
 
     GIT_CONFIG_GLOBAL=/dev/null \
       git clone git@github.com:abklabs/tooling.git ./tooling
+    [[ -n "$${TOOLING_BRANCH:-}" ]] && git -C tooling checkout "$$TOOLING_BRANCH"
       
     rm -f "$$GITHUB_KEY_FILE"
 
@@ -84,14 +87,33 @@ steps:
     <<: *default-agents
 
     command: |
+      git-set-branch () {
+        local var_name="$$1"
+        local dir="$$2"
+
+        # Get the value of the env var by indirect expansion
+        local branch="$${!var_name:-}"
+
+        if [[ -n "$$branch" ]]; then
+          echo "Checking out branch '$$branch' in directory '$$dir' (from \$$$var_name)..."
+          git -C "$dir" checkout "$$branch"
+        else
+          echo "NOT Checking out branch '$$branch' in directory '$$dir' (from \$$$var_name)..."        
+        fi
+        
+      }
+
       git clone https://github.com/abklabs/svmkit-examples ./svmkit-examples
       git clone https://github.com/abklabs/svmkit ./svmkit
       git clone https://github.com/abklabs/pulumi-svmkit ./pulumi-svmkit
+      git-set-branch SVMKIT_EXAMPLES_BRANCH ./svmkit_examples
+      git-set-branch SVMKIT_BRANCH ./svmkit
+      git-set-branch PULUMI_SVMKIT_BRANCH ./pulumi-svmkit
 
       # need to add githooks or make fails
       git -C svmkit config core.hooksPath .githooks
       git -C pulumi-svmkit config core.hooksPath .githooks
-
+      [[ -n "$${SVMKIT_PULUMI_BRANCH:-}" ]] && git -C tooling checkout "$$SVMKIT_PULUMI_BRANCH"
       ( cd svmkit && make)
       ( cd pulumi-svmkit && make)
       tar -zcf pulumi-artifacts.tgz pulumi-svmkit/sdk pulumi-svmkit/bin
