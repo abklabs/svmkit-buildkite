@@ -9,9 +9,8 @@ x-test-template: &test-template
   concurrency_group: pulumi-testing
 
   command: |
-
-    git clone https://github.com/abklabs/solana-lab ./solana-lab
-    [[ -n "$${SOLANA_LAB_BRANCH:-}" ]] && git -C ./solana-lab checkout "$$SOLANA_LAB_BRANCH"
+    . .buildkite/git-helpers.sh
+    git-clone-branch https://github.com/abklabs/solana-lab ./solana-lab
 
     # Setup ssh for private repo
     GITHUB_KEY_FILE=$HOME/.ssh/id_rsa
@@ -27,9 +26,8 @@ x-test-template: &test-template
     chmod 600 "$$GITHUB_KEY_FILE" ~/.ssh/config
 
     GIT_CONFIG_GLOBAL=/dev/null \
-      git clone git@github.com:abklabs/tooling.git ./tooling
-    [[ -n "$${TOOLING_BRANCH:-}" ]] && git -C tooling checkout "$$TOOLING_BRANCH"
-      
+      git-clone-branch git@github.com:abklabs/tooling.git ./tooling
+
     rm -f "$$GITHUB_KEY_FILE"
 
     if [[ -n "${SVMKIT_DIR:-}" || -n "${PULUMI_SVMKIT_DIR:-}" ]]; then
@@ -87,28 +85,10 @@ steps:
     <<: *default-agents
 
     command: |
-      git-set-branch () {
-        local var_name="$$1"
-        local dir="$$2"
-
-        # Get the value of the env var by indirect expansion
-        local branch="$${!var_name:-}"
-
-        if [[ -n "$$branch" ]]; then
-          echo "Checking out branch '$$branch' in directory '$$dir' (from \$$$var_name)..."
-          git -C "$dir" checkout "$$branch"
-        else
-          echo "NOT Checking out branch '$$branch' in directory '$$dir' (from \$$$var_name)..."        
-        fi
-        
-      }
-
-      git clone https://github.com/abklabs/svmkit-examples ./svmkit-examples
-      git clone https://github.com/abklabs/svmkit ./svmkit
-      git clone https://github.com/abklabs/pulumi-svmkit ./pulumi-svmkit
-      git-set-branch SVMKIT_EXAMPLES_BRANCH ./svmkit_examples
-      git-set-branch SVMKIT_BRANCH ./svmkit
-      git-set-branch PULUMI_SVMKIT_BRANCH ./pulumi-svmkit
+      . .buildkite/git-helpers.sh    
+      git-clone-branch https://github.com/abklabs/svmkit-examples ./svmkit-examples
+      git-clone-branch https://github.com/abklabs/svmkit ./svmkit
+      git-clone-branch https://github.com/abklabs/pulumi-svmkit ./pulumi-svmkit
 
       # need to add githooks or make fails
       git -C svmkit config core.hooksPath .githooks
