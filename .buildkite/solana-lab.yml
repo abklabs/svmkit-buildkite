@@ -10,6 +10,14 @@ x-test-template: &test-template
 
   command: |
     . .buildkite/git-helpers.sh
+    buildkite-git-summary \
+       https://github.com/abklabs/solana-lab \
+       https://github.com/abklabs/svmkit \
+       https://github.com/abklabs/pulumi-svmkit
+       
+    #  git@github.com:abklabs/tooling.git  \
+
+    echo "--- Building"
     git-clone-branch https://github.com/abklabs/solana-lab ./solana-lab
 
     # Setup ssh for private repo
@@ -37,10 +45,8 @@ x-test-template: &test-template
       PATH="$PWD/pulumi-svmkit/bin:$PATH"
       pkg_dir="$$PULUMI_SVMKIT_DIR/sdk/nodejs/bin"
       yarn link --cwd "$$pkg_dir"
-      
     fi
 
-    mkdir -p svmkit pulumi-svmkit
     CLOUD=aws  && . .buildkite/cloud-creds.sh
     CLOUD=gcp  && . .buildkite/cloud-creds.sh
     PULUMI_ACCESS_TOKEN=$(buildkite-agent secret get PULUMI_ACCESS_TOKEN)
@@ -53,7 +59,7 @@ x-test-template: &test-template
 
     PULUMI_STACK_NAME="abklabs/buildkite-solana-lab"
     pulumi-down() {
-        pulumi stack select "$$PULUMI_STACK_NAME"
+            pulumi stack select "$$PULUMI_STACK_NAME"
         pulumi down --yes || true
         pulumi stack rm --yes ||  true
     }
@@ -68,15 +74,16 @@ x-test-template: &test-template
       # with-local-pulumi-svmkit handles pulumi install
       pnpm rebuild
       pnpm install tap@13
+      echo "-- Running test suites"
       with-local-pulumi-svmkit ../pulumi-svmkit with-pulumi-up with-rpc-forwarded prove -v --ext .ts --ext .t test
     )
 
 env:
   PULUMI_ACCESS_TOKEN: "${PULUMI_ACCESS_TOKEN:-}"
-  SVMKIT_DIR: "${SVMKIT_DIR:-./svmkit}"
-  PULUMI_SVMKIT_DIR: "${PULUMI_SVMKIT_DIR:-./pulumi-svmkit}"
   AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-west-2}"
   GOOGLE_PROJECT: "${GOOGLE_PROJECT:-svmkit}"
+  SVMKIT_DIR: "${SVMKIT_DIR:-./svmkit}"
+  PULUMI_SVMKIT_DIR: "${PULUMI_SVMKIT_DIR:-./pulumi-svmkit}"
 
 steps:
   - key: build
@@ -85,8 +92,9 @@ steps:
     <<: *default-agents
 
     command: |
-      . .buildkite/git-helpers.sh    
-      git-clone-branch https://github.com/abklabs/svmkit-examples ./svmkit-examples
+      . .buildkite/git-helpers.sh
+      buildkite-git-summary https://github.com/abklabs/svmkit https://github.com/abklabs/pulumi-svmkit
+      echo "--- Building"
       git-clone-branch https://github.com/abklabs/svmkit ./svmkit
       git-clone-branch https://github.com/abklabs/pulumi-svmkit ./pulumi-svmkit
 
