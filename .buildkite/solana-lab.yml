@@ -1,0 +1,104 @@
+x-default-agents: &default-agents
+  agents:
+    queue: "${AGENT_QUEUE:-default}"
+
+x-test-template: &test-template
+  <<: *default-agents
+  depends_on: ["build"]
+  concurrency: 1
+  concurrency_group: pulumi-testing
+
+  command: |
+    . .buildkite/git-helpers.sh
+    git-clone-branch https://github.com/abklabs/solana-lab ./solana-lab
+
+    # Setup ssh for private repo
+    GITHUB_KEY_FILE=$HOME/.ssh/id_rsa
+    mkdir -p $(dirname $$GITHUB_KEY_FILE)
+    buildkite-agent secret get GITHUB_TOOLING_KEY > "$$GITHUB_KEY_FILE"
+
+    cat >> ~/.ssh/config <<EOF
+    Host github.com
+      StrictHostKeyChecking no
+      IdentitiesOnly yes
+    EOF
+
+    chmod 600 "$$GITHUB_KEY_FILE" ~/.ssh/config
+
+    GIT_CONFIG_GLOBAL=/dev/null \
+      git-clone-branch git@github.com:abklabs/tooling.git ./tooling
+
+    rm -f "$$GITHUB_KEY_FILE"
+
+    if [[ -n "${SVMKIT_DIR:-}" || -n "${PULUMI_SVMKIT_DIR:-}" ]]; then
+      echo "Downloading Pulumi SDK and provider plugin artifacts"
+      buildkite-agent artifact download pulumi-artifacts.tgz .
+      tar zxf pulumi-artifacts.tgz
+      PATH="$PWD/pulumi-svmkit/bin:$PATH"
+      pkg_dir="$$PULUMI_SVMKIT_DIR/sdk/nodejs/bin"
+      yarn link --cwd "$$pkg_dir"
+    fi
+
+    mkdir -p svmkit pulumi-svmkit
+    CLOUD=aws  && . .buildkite/cloud-creds.sh
+    CLOUD=gcp  && . .buildkite/cloud-creds.sh
+    PULUMI_ACCESS_TOKEN=$(buildkite-agent secret get PULUMI_ACCESS_TOKEN)
+
+    # Now that we are here, go to solana-lab:
+    # 1) Install pulumi
+    # 2) Create a stack
+    # 4) run tests
+    # 5) on EXIT be sure and cleanup the stack
+
+    PULUMI_STACK_NAME="abklabs/buildkite-solana-lab"
+    pulumi-down() {
+            pulumi stack select "$$PULUMI_STACK_NAME"
+        pulumi down --yes || true
+        pulumi stack rm --yes ||  true
+    }
+
+    # Add with-*pulumi* scripts to the path
+    PATH=$(realpath ./tooling/bin):$PATH;
+    (
+      cd solana-lab
+      pulumi stack init "$$PULUMI_STACK_NAME" || true
+      # Set up a trap on exit just in case something goes wrong.
+      trap 'pulumi-down' EXIT
+      # with-local-pulumi-svmkit handles pulumi install
+      pnpm rebuild
+      pnpm install tap@13
+      with-local-pulumi-svmkit ../pulumi-svmkit with-pulumi-up with-rpc-forwarded prove -v --ext .ts --ext .t test
+    )
+
+env:
+  PULUMI_ACCESS_TOKEN: "${PULUMI_ACCESS_TOKEN:-}"
+  SVMKIT_DIR: "${SVMKIT_DIR:-./svmkit}"
+  PULUMI_SVMKIT_DIR: "${PULUMI_SVMKIT_DIR:-./pulumi-svmkit}"
+  AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-west-2}"
+  GOOGLE_PROJECT: "${GOOGLE_PROJECT:-svmkit}"
+
+steps:
+  - key: build
+    label: ":hammer_and_wrench: Build svmkit and pulumi-svmkit"
+    if: build.env("SVMKIT_DIR") != null || build.env("PULUMI_SVMKIT_DIR") != null
+    <<: *default-agents
+
+    command: |
+      . .buildkite/git-helpers.sh    
+      git-clone-branch https://github.com/abklabs/svmkit-examples ./svmkit-examples
+      git-clone-branch https://github.com/abklabs/svmkit ./svmkit
+      git-clone-branch https://github.com/abklabs/pulumi-svmkit ./pulumi-svmkit
+
+      # need to add githooks or make fails
+      git -C svmkit config core.hooksPath .githooks
+      git -C pulumi-svmkit config core.hooksPath .githooks
+      [[ -n "$${SVMKIT_PULUMI_BRANCH:-}" ]] && git -C tooling checkout "$$SVMKIT_PULUMI_BRANCH"
+      ( cd svmkit && make)
+      ( cd pulumi-svmkit && make)
+      tar -zcf pulumi-artifacts.tgz pulumi-svmkit/sdk pulumi-svmkit/bin
+
+    artifact_paths:
+      - pulumi-artifacts.tgz
+
+  - label: ":test_tube: solana-lab"
+    <<: *test-template
