@@ -1,0 +1,142 @@
+#!/usr/bin/env opsh
+
+# Top-level associative array mapping repo name to its nested associative array name
+declare -A GIT_REPOSITORIES
+
+# Add a repo
+git::repo-add() {
+  local url="$1"
+  local dir="$2"
+  local branch="${3:-main}"
+  local options="${4:-}"
+
+  local name
+  name=$(basename -s .git "$url")
+  name=${name//-/_} 
+
+  local var="REPO_${name}"
+  declare -gA "$var"
+  eval "$var[url]=\"$url\""
+  eval "$var[dir]=\"$dir\""
+  eval "$var[branch]=\"$branch\""
+  eval "$var[options]=\"$options\""
+
+  GIT_REPOSITORIES["$name"]="$var"
+}
+
+# Show all repos
+git::repos-show() {
+  local format="${1:-text}"
+
+  for name in "${!GIT_REPOSITORIES[@]}"; do
+    declare -n repo="${GIT_REPOSITORIES[$name]}"
+    case "$format" in
+      --json)
+        jq -n --arg name "$name" \
+              --arg url "${repo[url]}" \
+              --arg dir "${repo[dir]}" \
+              --arg branch "${repo[branch]}" \
+              --arg options "${repo[options]}" \
+              '{($name): {url: $url, dir: $dir, branch: $branch, options: $options}}'
+        ;;
+      --yaml)
+        echo "$name:"
+        echo "  url: ${repo[url]}"
+        echo "  dir: ${repo[dir]}"
+        echo "  branch: ${repo[branch]}"
+        echo "  options: ${repo[options]}"
+        ;;
+      *)
+        echo "$name:"
+        echo "  URL:     ${repo[url]}"
+        echo "  Dir:     ${repo[dir]}"
+        echo "  Branch:  ${repo[branch]}"
+        echo "  Options: ${repo[options]:-<none>}"
+        ;;
+    esac
+  done
+}
+
+# Clone one repo
+git::repo-clone() {
+  local name="$1"
+  declare -n repo="${GIT_REPOSITORIES[$name]}"
+
+  echo "📦 Cloning ${repo[url]} → ${repo[dir]}"
+  if [[ -d "${repo[dir]}/.git" ]]; then
+    echo "⏩ Already a git repo: ${repo[dir]}"
+  else
+    git clone ${repo[options]} "${repo[url]}" "${repo[dir]}"
+  fi
+
+  if [[ -n "${repo[branch]}" ]]; then
+    git -C "${repo[dir]}" checkout "${repo[branch]}"
+  fi
+}
+
+# Clone all
+git::repos-clone() {
+  for name in "${!GIT_REPOSITORIES[@]}"; do
+    git::repo-clone "$name" || return 1
+  done
+}
+
+# Load from JSON or YAML
+git::repos-load-config() {
+  local file="$1"
+  [[ -f $file ]] || { echo "❌ File not found: $file"; return 1; }
+
+  local ext="${file##*.}"
+  local data
+
+  if [[ "$ext" == "json" ]]; then
+    data=$(jq -c 'to_entries[]' "$file")
+  elif [[ "$ext" == "yaml" || "$ext" == "yml" ]]; then
+    data=$(yq -o=json "$file" | jq -c 'to_entries[]')
+  else
+    echo "❌ Unsupported file type: $file"
+    return 1
+  fi
+
+  while IFS= read -r entry; do
+    local name=$(jq -r '.key' <<< "$entry")
+    local url=$(jq -r '.value.url' <<< "$entry")
+    local dir=$(jq -r '.value.dir' <<< "$entry")
+    local branch=$(jq -r '.value.branch // "main"' <<< "$entry")
+    local options=$(jq -r '.value.options // ""' <<< "$entry")
+    git::repo-add "$url" "$dir" "$branch" "$options"
+  done <<< "$data"
+}
+
+# Show a summary of repo/branch status in Buildkite style
+git::repos-summary() {
+  local failed=0
+  echo "--- :git: Git Branch Summary"
+
+  for repo_name in "${!GIT_REPOSITORIES[@]}"; do
+    local var_name="${GIT_REPOSITORIES[$repo_name]}"
+    declare -n repo="$var_name"
+
+    local repo_url="${repo[url]}"
+    local branch="${repo[branch]:-main}"
+
+    if ! git ls-remote --exit-code --quiet "$repo_url" &>/dev/null; then
+      echo ":x: Repo not found: $repo_url"
+      failed=1
+      continue
+    fi
+
+    if ! git ls-remote --exit-code --heads "$repo_url" "$branch" &>/dev/null; then
+      echo ":x: Branch '$branch' not found in $repo_url"
+      failed=1
+      continue
+    fi
+
+    local commit
+    commit=$(git ls-remote "$repo_url" "refs/heads/$branch" | awk '{print $1}')
+    echo ":white_check_mark: $repo_name → $branch @ ${commit:0:12}"
+  done
+
+  echo "^^^ +++"
+  return $failed
+}
