@@ -32,3 +32,34 @@ git-clone-branch() {
     git -C "$dest_dir" checkout "$branch"
   fi
 }
+
+buildkite-git-summary() {
+  local failed=0
+  echo "--- Git Branch Summary"
+  for full_url in "$@"; do
+    repo_name=$(basename "$full_url" .git)
+
+    # Normalize repo name to uppercase with underscores: e.g., tooling → TOOLING_BRANCH
+    var_name="$(echo "$repo_name" | tr '[:lower:]-' '[:upper:]_')_BRANCH"
+    branch="${!var_name:-main}"
+
+    # Check if repo exists
+    if ! git ls-remote --exit-code --quiet "$full_url" &>/dev/null; then
+      echo ":x: Repo not found: $full_url"
+      failed=1
+      continue
+    fi
+
+    # Check if branch exists
+    if ! git ls-remote --exit-code --heads "$full_url" "$branch" &>/dev/null; then
+      echo ":x: Branch '$branch' not found in $repo_name"
+      failed=1
+      continue
+    fi
+    
+    echo ":white_check_mark: $repo_name → $branch"
+  done
+  echo "^^^ +++"
+  return $failed
+}
+
