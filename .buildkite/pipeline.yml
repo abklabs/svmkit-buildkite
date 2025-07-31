@@ -44,6 +44,11 @@ steps:
       git clone https://github.com/abklabs/svmkit-examples ./svmkit-examples
       git clone https://github.com/abklabs/svmkit ./svmkit
       git clone https://github.com/abklabs/pulumi-svmkit ./pulumi-svmkit
+
+      for d in svmkit pulumi-svmkit ; do
+        git -C "$$d" config core.hooksPath .githooks
+      done
+
       chmod +x ./tests/test-svmkit
       echo Running test-svmkit --setup-only
       ./tests/test-svmkit --setup-only
@@ -56,6 +61,12 @@ steps:
     env:
       CLOUD: aws
       TEST_NAME: "test-aws-network-spe-py"
+    <<: *test-template
+
+  - label: ":heavy_check_mark: Test gcp-network-spe-ts"
+    env:
+      CLOUD: gcp
+      TEST_NAME: "test-gcp-network-spe-ts"
     <<: *test-template
 
   - label: ":heavy_check_mark: Test aws-validator-fd-ts"
