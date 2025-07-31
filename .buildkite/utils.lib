@@ -1,0 +1,15 @@
+#!/usr/bin/env opsh
+# -*- mode: bash -*-
+lib::import ssh
+
+ssh::setup() {    
+    # Begin SSH configuration
+    ssh::begin
+
+    # Configure SSH to ignore host key checking
+    ssh::config <<EOF
+Host *
+     UserKnownHostsFile /dev/null
+     StrictHostKeyChecking no
+EOF
+}
