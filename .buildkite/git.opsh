@@ -1,0 +1,270 @@
+#!/usr/bin/env opsh
+# shellcheck shell=bash
+
+# Top-level associative array mapping repo name to its nested associative array name
+declare -A GIT_REPOSITORIES
+
+_IFS=";"
+git::repo::name() {
+	local name=$1
+	name="${name##*/}"  # basename
+	name="${name%.git}" # Strip .git suffix
+	echo "$name"
+}
+
+git::repo::branch-var() {
+	local branch_var
+	branch_var=$(git::repo::name "$1")
+	branch_var="${branch_var//[^[:alnum:]]/_}" # Replace non-alphanumerics with _
+	branch_var=${branch_var,,}                 # lowercase
+	branch_var=${branch_var^^}                 # uppercase
+	echo "${branch_var}_BRANCH"
+}
+
+git::repos::get() {
+	if [[ $# -lt 2 ]]; then
+		log::error "Usage: ${FUNCNAME[0]} <repo> [url|dir|branch|options|ssh-secret]" >&2
+		return 1
+	fi
+
+	local name="$1" field="$2"
+	local url dir branch options ssh_secret
+	[[ -z "${GIT_REPOSITORIES[$name]+set}" ]] &&
+		log::error "Unknown repository: $name" &&
+		return 1
+
+	IFS=$_IFS read -r url dir branch options ssh_secret <<<"${GIT_REPOSITORIES[$name]}"
+
+	case "$field" in
+	url | dir | branch | options | ssh-secret)
+		key="${field//-/_}"
+		echo "${!key}"
+		;;
+	*)
+		log::error "Unknown option $field"
+		return 2
+		;;
+	esac
+}
+
+# Pull out any ssh keys and add them to the agent
+git::repos::ssh::keys::add() {
+	echo "--- :git: Adding ssh keys"
+
+	for repo_name in "${!GIT_REPOSITORIES[@]}"; do
+		local ssh_secret
+		ssh_secret=$(git::repos::get "$repo_name" "ssh-secret")
+		[[ -z "${ssh_secret:-}" ]] || buildkite-agent secret get "${ssh_secret}" | ssh::key::add
+	done
+}
+
+# Add a repo
+git::repos::add() {
+	if [[ -z "${1-}" ]]; then
+		log::error "Usage: ${FUNCNAME[0]} <url> [dir] [--branch <branch>] [--ssh-secret <secret>] [--options <opts>]"
+		return 1
+	fi
+
+	local url=$1
+	shift
+	local branch="main" ssh_secret="" options=""
+	local dir
+
+	# If no second argument or it's an option (starts with --),
+	# default dir to basename of URL
+	if [[ -z "${1-}" || $1 == --* ]]; then
+		dir=$(basename "$url" .git)
+	else
+		dir="$1"
+		shift
+	fi
+
+	# Parse options.  Allow "--option value" or "--option=value"
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--branch=*)
+			branch="${1#*=}"
+			;;
+		--branch)
+			branch="$2"
+			shift
+			;;
+		--ssh-secret=*)
+			ssh_secret="${1#*=}"
+			;;
+		--ssh-secret)
+			ssh_secret="$2"
+			shift
+			;;
+		--options=*)
+			options="${1#*=}"
+			;;
+		--options)
+			options="$2" shift
+			;;
+		*)
+			echo "Unknown argument: $1" >&2
+			return 1
+			;;
+		esac
+		shift
+	done
+
+	local name
+	name=$(git::repo::name "$url")
+	GIT_REPOSITORIES["$name"]=$url${_IFS}$dir${_IFS}$branch${_IFS}$options${_IFS}$ssh_secret
+}
+
+# Clone one repo
+git::repo::clone() {
+	if [[ -z "${1-}" ]]; then
+		log::error "Usage: ${FUNCNAME[0]} <repo>"
+		return 1
+	fi
+	local name url dir branch options ssh_secret
+	repo_name="$1"
+	IFS=$_IFS read -r url dir branch options ssh_secret <<<"${GIT_REPOSITORIES[$repo_name]}"
+
+	# shellcheck disable=SC2178
+	echo "Cloning $url -> $dir"
+	if [[ -d "${dir}/.git" ]]; then
+		echo "Already a git repo: ${dir}"
+	else
+		local git_env=()
+		[[ -n "${ssh_secret:-}" ]] && git_env=("GIT_CONFIG_GLOBAL=/dev/null")
+		cmd=(env "${git_env[@]}" git clone)
+		[[ -n "${options}" ]] && cmd+=("$options")
+		cmd+=("${url}" "${dir}")
+		"${cmd[@]}"
+	fi
+
+	[[ -n "${branch}" ]] && git -C "${dir}" checkout "${branch}"
+
+	# Set core.hooksPath if .githooks exists
+	if [[ -d "${dir}/.githooks" ]]; then
+		git -C "${dir}" config core.hooksPath .githooks
+		echo "Set core.hooksPath for ${dir}"
+	fi
+}
+
+# Clone all
+git::repos::clone() {
+	echo "--- :git: Cloning Repositories"
+
+	for name in "${!GIT_REPOSITORIES[@]}"; do
+		git::repo::clone "$name" || return 1
+	done
+}
+
+# Show a summary of repo/branch status in Buildkite style
+git::repos::summary() {
+	local failed=0
+	echo "--- :git: Git Branch Summary"
+
+	for repo in "${!GIT_REPOSITORIES[@]}"; do
+		local git_env=()
+		local url branch
+
+		url="$(git::repos::get "$repo" url)"
+		branch="$(git::repos::get "$repo" branch)"
+		ssh_secret="$(git::repos::get "$repo" ssh-secret)"
+		# Setup special handling if we have using an ssh secret.
+		# Avoids url rewrites.
+		[[ -n "${ssh_secret:-}" ]] && git_env=("GIT_CONFIG_GLOBAL=/dev/null")
+
+		output=$(env "${git_env[@]}" git ls-remote "$url" "refs/heads/$branch")
+		if ! read -r commit _ <<<"$output"; then
+			echo "❌ Repo not found: $url"
+			failed=1
+			continue
+		fi
+
+		if [[ -z "$commit" ]]; then
+			echo "❌ Branch '$branch' not found in $url"
+			failed=1
+			continue
+		fi
+
+		local output commit
+		output=$(env "${git_env[@]}" git ls-remote "$url" "refs/heads/$branch")
+		commit=${output%%[[:space:]]*}
+		echo "✅ $repo -> $branch @ ${commit:0:12}"
+	done
+
+	echo -e "^^^ +++\n"
+	return $failed
+}
+
+# Function to validate a Git repository.  Error are logged via opsh and
+# the return status indicates the error.
+#
+# Usage:
+#   git::repo::validate <repo_path>
+#
+# Returns:
+#   0: Success (valid repo, and in sync if --in-sync was given).
+#   1: Invalid arguments.
+#   2: Not a valid Git repository.
+#   3: Local changes not committed.
+#   4: Fetch failed (remote not accessible).
+#   5: No upstream branch configured.
+#   6: Local branch is not in sync (ahead, behind, or diverged).
+#   outputs: "repo_name branch_name commits_ahead commits_behind"
+
+git::repo::validate() {
+	if [[ -z "${1-}" ]]; then
+		log::error "Usage: ${FUNCNAME[0]} <repo_path>"
+		return 1
+	fi
+	local repo_path=$1
+	local return_code=0
+
+	# Check if the repository path is a valid Git directory
+
+	repo_url=$(git -C "$repo_path" config --get remote.origin.url 2>/dev/null) || true
+	if [[ -z "$repo_url" ]]; then
+		log::error "${repo_path} is not a valid Git repository"
+		return 2
+	fi
+
+	local repo_name repo_branch local_is_ahead local_is_behind
+	repo_name=$(git::repo::name "$repo_url")
+	local_is_ahead=-1
+	local_is_behind=-1
+	# Enter the repository to run git commands
+	pushd "$repo_path" >/dev/null || return 1
+
+	repo_branch=$(git rev-parse --abbrev-ref HEAD)
+
+	if ! git diff --quiet || ! git diff --cached --quiet; then
+		log::error "${repo_path}: Uncommitted changes detected."
+		return_code=3
+	elif ! git fetch origin >/dev/null 2>&1; then
+		log::error "${repo_path}: Could not fetch from remote. Check network or URL"
+		return_code=4
+		# Check if the branch has an upstream configured.
+	elif ! git rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
+		log::error "${repo_path}: Branch '${repo_branch}' has no upstream configured"
+		return_code=5
+	else
+		local_is_ahead=$(git rev-list --count HEAD "^@{u}")
+		local_is_behind=$(git rev-list --count "@{u}" ^HEAD)
+
+		if ((local_is_ahead == 0 && local_is_behind == 0)); then
+			log::info "${repo_path}: Branch '${repo_branch}' is in sync with remote"
+		else
+			return_code=6
+			if ((local_is_ahead > 0 && local_is_behind > 0)); then
+				log::error "${repo_path}: Diverged. Ahead by ${local_is_ahead}, behind by ${local_is_behind}"
+			elif ((local_is_ahead > 0)); then
+				log::error "${repo_path}: Ahead of remote by ${local_is_ahead} commits"
+			else
+				log::error "${repo_path}: Behind remote by ${local_is_behind} commits"
+			fi
+		fi
+	fi
+
+	popd >/dev/null || true
+	echo -e "${repo_name} ${repo_branch} ${local_is_ahead} ${local_is_behind}"
+	return "$return_code"
+}
