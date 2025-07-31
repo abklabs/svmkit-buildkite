@@ -1,0 +1,233 @@
+#!/usr/bin/env opsh
+
+# Top-level associative array mapping repo name to its nested associative array name
+declare -A GIT_REPOSITORIES
+
+# Usage:
+# git::repo-add <url> <dir> [--branch=name] [options] [--ssh-secret=SECRET_NAME] [--any_other=val]
+# Add a repo
+git::repo-add() {
+	local url=""
+	local dir=""
+	local branch=""
+	local options=""
+	local ssh_secret=""
+
+	# Parse required positional args
+	url="$1"
+	shift
+	dir="$1"
+	shift
+
+	# Parse named args
+	while [[ $# -gt 0 ]]; do
+	    case "$1" in
+		--branch=*)
+		    branch="${1#*=}"
+		    shift
+		    ;;
+		--branch)
+		    branch="$2"
+		    shift 2
+		    ;;
+		--ssh-secret=*)
+		    ssh_secret="${1#*=}"
+		    shift
+		    ;;
+		--ssh-secret)
+		    ssh_secret="$2"
+		    shift 2
+		    ;;
+		--options=*)
+		    options="${1#*=}"
+		    shift
+		    ;;
+		--options)
+		    options="$2"
+		    shift 2
+		    ;;
+		*)
+		    echo "Unknown argument: $1" >&2
+		    return 1
+		    ;;
+		esac
+	done
+
+	# Derive normalized name from repo
+	local name
+	name=$(basename -s .git "$url")
+	name=${name//-/_}
+	# If no branch specified, check env var like TOOLING_BRANCH
+	if [[ -z "$branch" ]]; then
+	    local env_branch_var="${name^^}_BRANCH"
+	    branch="${!env_branch_var:-main}"
+	fi
+	
+	local var="REPO_${name}"
+	declare -gA "$var"
+	eval "$var[url]=\"$url\""
+	eval "$var[dir]=\"$dir\""
+	eval "$var[branch]=\"$branch\""
+	eval "$var[options]=\"$options\""
+	[[ -n "$ssh_secret" ]] && eval "$var[ssh_secret]=\"$ssh_secret\""
+
+	GIT_REPOSITORIES["$name"]="$var"
+}
+
+# Show all repos
+git::repos-show() {
+	local format="${1:-text}"
+
+	for name in "${!GIT_REPOSITORIES[@]}"; do
+		declare -n repo="${GIT_REPOSITORIES[$name]}"
+
+		case "$format" in
+		--json)
+			jq_args=(
+				--arg name "$name"
+				--arg url "${repo[url]}"
+				--arg dir "${repo[dir]}"
+				--arg branch "${repo[branch]}"
+			)
+			json_body="{
+          (\$name): {
+            url: \$url,
+            dir: \$dir,
+            branch: \$branch"
+
+			if [[ -n "${repo[options]}" ]]; then
+				jq_args+=(--arg options "${repo[options]}")
+				json_body+=", options: \$options"
+			fi
+
+			if [[ -n "${repo[ssh_secret]}" ]]; then
+				jq_args+=(--arg ssh_secret "${repo[ssh_secret]}")
+				json_body+=", ssh_secret: \$ssh_secret"
+			fi
+
+			json_body+="} }"
+			jq -n "${jq_args[@]}" "$json_body"
+			;;
+
+		--yaml)
+			echo "$name:"
+			echo "  url: ${repo[url]}"
+			echo "  dir: ${repo[dir]}"
+			echo "  branch: ${repo[branch]}"
+			[[ -n "${repo[options]}" ]] && echo "  options: ${repo[options]}"
+			[[ -n "${repo[ssh_secret]}" ]] && echo "  ssh_secret: ${repo[ssh_secret]}"
+			;;
+
+		*)
+			echo "$name:"
+			echo "  URL:     ${repo[url]}"
+			echo "  Dir:     ${repo[dir]}"
+			echo "  Branch:  ${repo[branch]}"
+			[[ -n "${repo[options]}" ]] && echo "  Options: ${repo[options]}"
+			[[ -n "${repo[ssh_secret]}" ]] && echo "  SSH Key: ${repo[ssh_secret]}"
+			;;
+		esac
+	done
+}
+
+# Clone one repo
+git::repo-clone() {
+	local name="$1"
+	declare -n repo="${GIT_REPOSITORIES[$name]}"
+
+	echo "Cloning ${repo[url]} → ${repo[dir]}"
+	if [[ -d "${repo[dir]}/.git" ]]; then
+		echo "⏩ Already a git repo: ${repo[dir]}"
+	else
+	        local git_env=()
+		[[ -n "${repo[ssh_secret]:-}" ]] && git_env=("GIT_CONFIG_GLOBAL=/dev/null" "GIT_SSH_COMMAND=ssh -F $_OPSH_SSH_CONTEXT/config")
+		cmd=(env "${git_env[@]}" git clone)
+		[[ -n "${repo[options]}" ]] && cmd+=(${repo[options]})
+		cmd+=("${repo[url]}" "${repo[dir]}")
+		"${cmd[@]}"
+	fi
+
+	if [[ -n "${repo[branch]}" ]]; then
+		git -C "${repo[dir]}" checkout "${repo[branch]}"
+	fi
+
+	# Set core.hooksPath if .githooks exists
+	if [[ -d "${repo[dir]}/.githooks" ]]; then
+		git -C "${repo[dir]}" config core.hooksPath .githooks
+		echo ":wrench: Set core.hooksPath for ${repo[dir]}"
+	fi
+}
+
+# Clone all
+git::repos-clone() {
+        echo --- :git: Cloning Repositories
+	for name in "${!GIT_REPOSITORIES[@]}"; do
+		git::repo-clone "$name" || return 1
+	done
+}
+
+# Load from JSON or YAML
+git::repos-load-config() {
+	local file="$1"
+	[[ -f $file ]] || {
+		echo "❌ File not found: $file"
+		return 1
+	}
+
+	local ext="${file##*.}"
+	local data
+
+	if [[ "$ext" == "json" ]]; then
+		data=$(jq -c 'to_entries[]' "$file")
+	elif [[ "$ext" == "yaml" || "$ext" == "yml" ]]; then
+		data=$(yq -o=json "$file" | jq -c 'to_entries[]')
+	else
+		echo "❌ Unsupported file type: $file"
+		return 1
+	fi
+
+	while IFS= read -r entry; do
+		local name=$(jq -r '.key' <<<"$entry")
+		local url=$(jq -r '.value.url' <<<"$entry")
+		local dir=$(jq -r '.value.dir' <<<"$entry")
+		local branch=$(jq -r '.value.branch // "main"' <<<"$entry")
+		local options=$(jq -r '.value.options // ""' <<<"$entry")
+		git::repo-add "$url" "$dir" "$branch" "$options"
+	done <<<"$data"
+}
+
+# Show a summary of repo/branch status in Buildkite style
+git::repos-summary() {
+	local failed=0
+	echo "--- :git: Git Branch Summary"
+
+	for repo_name in "${!GIT_REPOSITORIES[@]}"; do
+		local var_name="${GIT_REPOSITORIES[$repo_name]}"
+		declare -n repo="$var_name"
+
+		local repo_url="${repo[url]}"
+		local branch="${repo[branch]:-main}"
+
+		local git_env=()
+		[[ -n "${repo[ssh_secret]:-}" ]] && git_env=("GIT_CONFIG_GLOBAL=/dev/null" "GIT_SSH_COMMAND=ssh -F $_OPSH_SSH_CONTEXT/config")
+
+		if ! env "${git_env[@]}" git ls-remote --exit-code --quiet "$repo_url" &>/dev/null; then
+			echo "❌ Repo not found: $repo_url"
+			failed=1
+			continue
+		fi
+
+		if ! env "${git_env[@]}" git ls-remote --exit-code --heads "$repo_url" "$branch" &>/dev/null; then
+			echo "❌ Branch '$branch' not found in $repo_url"
+			failed=1
+			continue
+		fi
+
+		local commit
+		commit=$(env "${git_env[@]}" git ls-remote "$repo_url" "refs/heads/$branch" | awk '{print $1}')
+		echo "✅ $repo_name → $branch @ ${commit:0:12}"
+	done
+
+	echo -e "^^^ +++\n"
+	return $failed
+}
