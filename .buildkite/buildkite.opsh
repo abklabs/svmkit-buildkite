@@ -1,0 +1,14 @@
+#!/usr/bin/env opsh
+# shellcheck shell=bash
+
+bk::group() {
+	echo "--- $*"
+}
+
+bk::group::unimportant() {
+	echo "~~~ $*"
+}
+
+bk::group::open() {
+	echo "+++ $*"
+}

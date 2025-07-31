@@ -1,0 +1,100 @@
+x-default-agents: &default-agents
+  agents:
+    queue: "${AGENT_QUEUE:-default}"
+
+env:
+  AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-west-2}"
+  GOOGLE_PROJECT: "${GOOGLE_PROJECT:-svmkit}"
+  PULUMI_STACK_NAME: "abklabs/buildkite-solana-lab-${BUILDKITE_BUILD_NUMBER}"
+
+steps:
+  - key: build
+    label: ":hammer_and_wrench: Build svmkit and pulumi-svmkit"
+    if: build.env("SVMKIT_BRANCH") != null || build.env("PULUMI_SVMKIT_BRANCH") != null
+    <<: *default-agents
+
+    command: |
+      source .buildkite/lib.bash
+
+      if [[ -v SVMKIT_BRANCH ]] ; then
+        git::repos::add git@github.com:abklabs/svmkit.git svmkit
+      fi
+
+      git::repos::add git@github.com:abklabs/pulumi-svmkit.git pulumi-svmkit
+      git::repos::summary
+      git::repos::clone
+
+      if [[ -v SVMKIT_BRANCH ]] ; then
+        bk::group "Building svmkit"
+        ( cd svmkit && make)
+      fi
+
+      bk::group "Building pulumi-svmkit"
+      (
+        cd pulumi-svmkit
+        if [[ -v SVMKIT_BRANCH ]] ; then
+          log::info "Patching pulumi-svmkit to use local svmkit"
+          ( cd provider && go mod edit -replace github.com/abklabs/svmkit/pkg=../../svmkit/pkg )
+        fi
+        make
+      )
+      tar -zcf pulumi-artifacts.tgz pulumi-svmkit/sdk pulumi-svmkit/bin
+
+    artifact_paths:
+      - pulumi-artifacts.tgz
+
+  - key: solana-lab
+    label: ":test_tube: solana-lab"
+    <<: *default-agents
+    depends_on: ["build"]
+    concurrency: 1
+    concurrency_group: pulumi-testing
+
+    command: |
+      source .buildkite/lib.bash
+
+      git::repos::add git@github.com:abklabs/solana-lab.git solana-lab
+      git::repos::add git@github.com:abklabs/tooling.git tooling
+      git::repos::summary
+      git::repos::clone
+
+      setup-aws-credentials
+      setup-gcp-credentials
+
+      PATH=$$(realpath ./tooling/bin):$$PATH
+      (
+        cd solana-lab
+        bk::group "Setting up for Test Suite"
+        pulumi stack init "$$PULUMI_STACK_NAME"
+        pulumi stack select "$$PULUMI_STACK_NAME"
+        pulumi-install-and-run with-pulumi-up with-rpc-forwarded prove --ext .ts --ext .t test
+        pulumi stack rm --yes
+      )
+
+  - key: cleanup
+    label: ":broom: Cleanup wayward stacks"
+    <<: *default-agents
+    command: |
+      source .buildkite/lib.bash
+
+      git::repos::add git@github.com:abklabs/solana-lab.git solana-lab
+      git::repos::add git@github.com:abklabs/tooling.git tooling
+      git::repos::summary
+      git::repos::clone
+
+      if (cd solana-lab && pulumi stack select "$$PULUMI_STACK_NAME" 2>/dev/null) ; then
+        bk::group ":white_check_mark: Stack '$$PULUMI_STACK_NAME' does not exist. Nothing to destroy."
+        exit 0
+      fi
+
+      setup-aws-credentials
+      setup-gcp-credentials
+
+      PATH=$$(realpath ./tooling/bin):$$PATH
+      (
+        cd solana-lab
+        pulumi-install-and-run cleanup-pulumi-stack "$$PULUMI_STACK_NAME"
+      )
+
+    depends_on: ["solana-lab"]
+    allow_dependency_failure: true
