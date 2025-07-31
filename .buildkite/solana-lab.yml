@@ -9,29 +9,22 @@ x-test-template: &test-template
   concurrency_group: pulumi-testing
 
   command: |
-    . .buildkite/git-helpers.sh
-    git-clone-branch https://github.com/abklabs/solana-lab ./solana-lab
+    source opsh
+    source .buildkite/git.lib
+    source .buildkite/utils.lib
+
+    # setup an ssh agent.  Will need to use '-F $_OPSH_SSH_CONTEXT/config' later for ssh
+    ssh::setup
 
     # Setup ssh for private repo
-    GITHUB_KEY_FILE=$HOME/.ssh/id_rsa
-    mkdir -p $(dirname $$GITHUB_KEY_FILE)
-    buildkite-agent secret get GITHUB_TOOLING_KEY > "$$GITHUB_KEY_FILE"
-
-    cat >> ~/.ssh/config <<EOF
-    Host github.com
-      StrictHostKeyChecking no
-      IdentitiesOnly yes
-    EOF
-
-    chmod 600 "$$GITHUB_KEY_FILE" ~/.ssh/config
-
-    GIT_CONFIG_GLOBAL=/dev/null \
-      git-clone-branch git@github.com:abklabs/tooling.git ./tooling
-
-    rm -f "$$GITHUB_KEY_FILE"
+    buildkite-agent secret get GITHUB_TOOLING_KEY | ssh::key::add
+    git::repo-add git@github.com:abklabs/solana-lab.git solana-lab
+    git::repo-add git@github.com:abklabs/tooling.git tooling --ssh-secret GITHUB_TOOLING_KEY
+    git::repos-summary
+    git::repos-clone
 
     if [[ -n "${SVMKIT_DIR:-}" || -n "${PULUMI_SVMKIT_DIR:-}" ]]; then
-      echo "Downloading Pulumi SDK and provider plugin artifacts"
+      echo "-- Downloading Pulumi SDK and provider plugin artifacts"
       buildkite-agent artifact download pulumi-artifacts.tgz .
       tar zxf pulumi-artifacts.tgz
       PATH="$PWD/pulumi-svmkit/bin:$PATH"
@@ -52,7 +45,7 @@ x-test-template: &test-template
     # 5) on EXIT be sure and cleanup the stack
 
     PULUMI_STACK_NAME="abklabs/buildkite-solana-lab"
-    pulumi-down() {
+    pulumi-cleanup() {
         pulumi stack select "$$PULUMI_STACK_NAME"
         pulumi down --yes || true
         pulumi stack rm --yes ||  true
@@ -62,13 +55,14 @@ x-test-template: &test-template
     PATH=$(realpath ./tooling/bin):$PATH;
     (
       cd solana-lab
+      echo "--- Setting up for Test Suite"
       pulumi stack init "$$PULUMI_STACK_NAME" || true
       # Set up a trap on exit just in case something goes wrong.
-      trap 'pulumi-down' EXIT
-      # with-local-pulumi-svmkit handles pulumi install
+      trap 'pulumi-cleanup' EXIT
       pnpm rebuild
       pnpm install tap@13
-      with-local-pulumi-svmkit ../pulumi-svmkit with-pulumi-up with-rpc-forwarded prove -v --ext .ts --ext .t test
+      # with-local-pulumi-svmkit handles pulumi install
+      with-local-pulumi-svmkit ../pulumi-svmkit with-pulumi-up with-rpc-forwarded prove --ext .ts --ext .t test
     )
 
 env:
@@ -85,15 +79,19 @@ steps:
     <<: *default-agents
 
     command: |
-      . .buildkite/git-helpers.sh    
-      git-clone-branch https://github.com/abklabs/svmkit-examples ./svmkit-examples
-      git-clone-branch https://github.com/abklabs/svmkit ./svmkit
-      git-clone-branch https://github.com/abklabs/pulumi-svmkit ./pulumi-svmkit
+      source opsh
+      source .buildkite/git.lib
+      source .buildkite/utils.lib
 
-      # need to add githooks or make fails
-      git -C svmkit config core.hooksPath .githooks
-      git -C pulumi-svmkit config core.hooksPath .githooks
-      [[ -n "$${SVMKIT_PULUMI_BRANCH:-}" ]] && git -C tooling checkout "$$SVMKIT_PULUMI_BRANCH"
+      # setup an ssh agent.  Will need to use '-F $_OPSH_SSH_CONTEXT/config' later for ssh
+      ssh::setup
+
+      git::repo-add git@github.com:abklabs/svmkit.git svmkit 
+      git::repo-add git@github.com:abklabs/pulumi-svmkit.git pulumi-svmkit 
+      git::repos-summary
+      git::repos-clone
+
+      echo "--- Building svmit && pulumi-svmkit"
       ( cd svmkit && make)
       ( cd pulumi-svmkit && make)
       tar -zcf pulumi-artifacts.tgz pulumi-svmkit/sdk pulumi-svmkit/bin
