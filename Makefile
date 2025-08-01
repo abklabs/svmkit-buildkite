@@ -33,6 +33,10 @@ docker-buildx:
 		-f $(DOCKERFILE) \
 		$(BUILD_CONTEXT)
 
+# Target to simplify testing
+docker-shell:
+	docker run --platform=linux/$(ARCH) -it --entrypoint=/bin/bash $(TAG)
+
 .env-checked: bin/check-env
 	./bin/check-env
 	touch .env-checked
