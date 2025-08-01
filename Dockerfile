@@ -6,6 +6,8 @@ FROM buildkite/agent:3-ubuntu
 ARG TARGETPLATFORM
 ENV TARGETPLATFORM=${TARGETPLATFORM:-linux/amd64}
 
+ARG NODE_VERSION=20
+
 # Use bash for all RUN steps
 SHELL ["/bin/bash", "-c"]
 
@@ -42,6 +44,18 @@ RUN apt-get update && apt-get install -y \
 RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \
     echo "deb https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list && \
     apt-get update && apt-get install -y yarn
+
+# Install nvm
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+
+# Set env
+ENV NVM_DIR=/root/.nvm
+
+# Install node
+RUN bash -c "source $NVM_DIR/nvm.sh && nvm install $NODE_VERSION"
+
+# set ENTRYPOINT for reloading nvm-environment
+ENTRYPOINT ["bash", "-c", "source $NVM_DIR/nvm.sh && exec \"$@\"", "--"]
 
 # Install PNPM
 RUN curl -fsSL https://get.pnpm.io/install.sh | \
