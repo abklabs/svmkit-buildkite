@@ -1,0 +1,133 @@
+#!/usr/bin/env opsh
+set -euo pipefail
+
+# === Config ===
+ORG="svmkit"
+COMMIT="HEAD"
+BRANCH="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
+MESSAGE="Triggered from script"
+
+# === Derived values ===
+REPOS=()
+DRY_RUN=false
+
+usage() {
+	cat >&2 <<EOF
+Usage: $0 [options] PIPELINE
+
+   Trigger buildkite pipeline for a set of local repos.
+   Branch information is pulled from local repos specifed in the --repo
+   flag and passed as environment variables to buildkite.  The pipline
+   needs to support this convention.  Branch info is passed as
+   <REPO>_BRANCH environment variables.
+
+Options:
+  --repo <path>       Include the given repo (can be used multiple times)
+  -n, --dry-run       Print the API call instead of triggering the build
+  -m, --message <msg> Set the build message (default: "Triggered from script")
+  -h, --help          Show this help message and exit
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	--repo)
+		REPOS+=("$2")
+		shift 2
+		;;
+	-n | --dry-run)
+		DRY_RUN=true
+		shift
+		;;
+	-m | --message)
+		MESSAGE="$2"
+		shift 2
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	--* | -*)
+		echo "Unknown option: $1" >&2
+		exit 1
+		;;
+	*)
+		if [[ -n "${PIPELINE:-}" ]]; then
+			echo "Error: Multiple pipeline names specified: '$PIPELINE' and '$1'" >&2
+			exit 1
+		fi
+		PIPELINE="$1"
+		shift
+		;;
+	esac
+done
+
+if [[ -z "${PIPELINE:-}" ]]; then
+	usage
+	exit 1
+fi
+
+# === Collect env vars ===
+declare -A env_map
+
+for repo_path in "${REPOS[@]}"; do
+	if [[ -d "$repo_path/.git" ]]; then
+		pushd "$repo_path" >/dev/null
+		repo_name=$(basename "$repo_path" | tr '[:lower:]' '[:upper:]' | tr -c 'A-Z0-9' '_')
+		# remove trailing '_'
+		repo_name="${repo_name%"${repo_name##*[!_]}"}"
+		repo_branch=$(git rev-parse --abbrev-ref HEAD)
+
+		env_map["${repo_name}_BRANCH"]="$repo_branch"
+		popd >/dev/null
+	else
+		echo "Warning: $repo_path is not a valid Git repository. Skipping."
+	fi
+done
+
+# === Convert to JSON ===
+ENV_VARS_JSON="{"
+first=true
+for key in "${!env_map[@]}"; do
+	[[ $first == true ]] && first=false || ENV_VARS_JSON+=","
+	val=${env_map[$key]}
+	if [[ $val == null ]]; then
+		ENV_VARS_JSON+="\"$key\": null"
+	else
+		escaped=$(jq -Rn --arg v "$val" '$v')
+		ENV_VARS_JSON+="\"$key\": ${escaped}"
+	fi
+done
+ENV_VARS_JSON+="}"
+
+# === Output or Trigger ===
+build_payload=$(
+	jq -n \
+		--arg commit "$COMMIT" \
+		--arg branch "$BRANCH" \
+		--arg message "$MESSAGE" \
+		--argjson env "$ENV_VARS_JSON" \
+		'{
+	    "commit": $commit,
+	    "branch": $branch,
+	    "message": $message,
+	    "env": $env
+	  }'
+)
+
+curl_cmd=(
+	curl -s -X POST
+	"https://api.buildkite.com/v2/organizations/$ORG/pipelines/$PIPELINE/builds"
+	-H "Authorization: Bearer ${BUILDKITE_API_TOKEN:-BUILDKITE_API_TOKEN_NOT_SET}"
+	-H "Content-Type: application/json"
+	-d "$build_payload"
+)
+
+if $DRY_RUN; then
+	echo "${curl_cmd[@]/${BUILDKITE_API_TOKEN}/\$BUILDKITE_API_TOKEN}"
+else
+	response=$("${curl_cmd[@]}")
+	build_url=$(jq -r '.web_url' <<<"$response")
+
+	echo "Build triggered: $build_url"
+fi
