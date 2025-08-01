@@ -109,6 +109,10 @@ RUN source /arch.env && \
     else \
     echo "Skipping Anza install on $ARCH"; \
     fi
+
+# Install prove that supports TAP 14
+RUN cpan install TAP::Harness < /dev/null
+
 # Optional: verify tools
 RUN pulumictl version && pulumi version && go version && dotnet --version
 WORKDIR /workdir
