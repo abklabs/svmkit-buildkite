@@ -6,6 +6,10 @@ The following secrets need to be provisioned with the appropriate service
 and then set in the [`Buildkite Secrets API.`](https://buildkite.com/docs/pipelines/security/secrets/buildkite-secrets)
 
 The appropiate values are set in [`.buildkite/cloud-creds.sh`](.buildkite/cloud-creds.sh):
+```
+    CLOUD=aws  && . .buildkite/cloud-creds.sh
+    CLOUD=gcp  && . .buildkite/cloud-creds.sh
+```
 
 ### Pulumi
   - PULUMI_ACCESS_TOKEN
@@ -23,6 +27,8 @@ The appropiate values are set in [`.buildkite/cloud-creds.sh`](.buildkite/cloud-
 	- roles/compute.networkAdmin
 	- roles/compute.securityAdmin
 
+  notes:  Create a Service key, say 'svmkit-buildkite'
+  The service-account key needs the following permission set:
 
 ```
 PROJECT=my-gcloud-project
