@@ -151,3 +151,92 @@ git::repos-summary() {
 	echo -e "^^^ +++\n"
 	return $failed
 }
+
+# Function to validate a Git repository.  Error are logged via opsh and
+# the return status indicates the error.
+#
+# Usage:
+#   git::repo::validate <repo_path>
+#
+# Returns:
+#   0: Success (valid repo, and in sync if --in-sync was given).
+#   1: Invalid arguments.
+#   2: Not a valid Git repository.
+#   3: Local changes not committed.
+#   4: Fetch failed (remote not accessible).
+#   5: No upstream branch configured.
+#   6: Local branch is not in sync (ahead, behind, or diverged).
+#   outputs: "repo_name branch_name commits_ahead commits_behind"
+#   commits_head/behind = -1 if there is an error
+
+git::repo-validate() {
+	local repo_path
+	local return_code=0
+
+	# Argument parsing
+	if [[ "$#" -eq 0 ]]; then
+		log::error "Usage: ${FUNCNAME[0]} <repo_path>" >&2
+		return 1
+	fi
+
+	for arg in "$@"; do
+		if [[ -z "${repo_path:-}" ]]; then
+			repo_path="$arg"
+		fi
+	done
+
+	# Check if the repository path is a valid Git directory
+	if [[ ! -d "$repo_path/.git" ]]; then
+		log::error "${repo_path} is not a valid Git repository"
+		return 2
+	fi
+
+	repo_name=$(basename "$repo_path" | tr '[:lower:]' '[:upper:]' | tr -c 'A-Z0-9' '_')
+	# remove trailing '_'
+	repo_name="${repo_name%"${repo_name##*[!_]}"}"
+
+	# Enter the repository to run git commands
+	pushd "$repo_path" >/dev/null || return 1
+	local repo_branch
+	repo_branch=$(git rev-parse --abbrev-ref HEAD)
+	local local_is_ahead
+	local local_is_behind
+	local_is_ahead=-1
+	local_is_behind=-1
+	if ! git diff --quiet || ! git diff --cached --quiet; then
+		log::error "${repo_path}: Uncommitted changes detected."
+		return_code=3
+		# Fetch the latest remote info. Suppress output and check for failure.
+	elif ! git fetch origin >/dev/null 2>&1; then
+		log::error "${repo_path}: Could not fetch from remote. Check network or remote URL"
+		return_code=4
+	else
+		# Check if the branch has an upstream configured.
+		if ! git rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
+			log::error "${repo_path}: Branch '${repo_branch}' has no upstream configured"
+			return_code=5
+		else
+			# Compare local and remote commits
+			local_is_ahead=$(git rev-list --count HEAD "^@{u}")
+			local_is_behind=$(git rev-list --count "@{u}" ^HEAD)
+			if [[ "$local_is_ahead" -eq 0 && "$local_is_behind" -eq 0 ]]; then
+				log::info "${repo_path}: Branch '${repo_branch}' is in sync with remote"
+				return_code=0
+			elif [[ "$local_is_ahead" -gt 0 || "$local_is_behind" -gt 0 ]]; then
+				return_code=6
+				if [[ "$local_is_ahead" -gt 0 && "$local_is_behind" -gt 0 ]]; then
+					log::error "${repo_path}: Diverged. Ahead by ${local_is_ahead}, behind by ${local_is_behind}"
+				elif [[ "$local_is_ahead" -gt 0 ]]; then
+					true
+					log::error "${repo_path}: Ahead of remote by ${local_is_ahead} commits"
+				else
+					log::error "${repo_path}: Behind remote by ${local_is_behind} commits"
+				fi
+			fi
+		fi
+	fi
+
+	popd >/dev/null || true
+	echo -e "${repo_name} ${repo_branch} ${local_is_ahead} ${local_is_behind}"
+	return "$return_code"
+}
