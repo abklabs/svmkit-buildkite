@@ -1,0 +1,88 @@
+x-test-template: &test-template
+  agents:
+    queue: "${AGENT_QUEUE:-default}"
+  depends_on: ["build"]
+  env:
+    PULUMI_ACCESS_TOKEN: "${PULUMI_ACCESS_TOKEN}"
+    AWS_DEFAULT_REGION: "us-west-2"
+  concurrency: 1
+  concurrency_group: pulumi-testing
+
+  command: |
+    source opsh
+    source .buildkite/git.opsh
+    source .buildkite/lib.opsh
+
+    git::repo-add git@github.com:abklabs/svmkit-examples svmkit-examples
+    git::repos-summary
+    git::repos-clone
+
+    if [[ -n "${PULUMI_SVMKIT_BRANCH:-}" ]]; then
+      echo "Downloading Pulumi SDK and provider plugin artifacts"
+      buildkite-agent artifact download pulumi-artifacts.tgz .
+      tar zxf pulumi-artifacts.tgz
+      export PATH="$PWD/pulumi-svmkit/bin:$PATH"
+    fi
+
+    # Cloud tag at the step level outside macro.
+    . .buildkite/cloud-creds.sh
+
+    export PULUMI_ACCESS_TOKEN=$(buildkite-agent secret get PULUMI_ACCESS_TOKEN)
+    mkdir svmkit # Keep test-svmkit happy
+    [[ -v SVMKIT_BRANCH ]] && export SVMKIT_DIR=./svmkit
+    [[ -v PULUMI_SVMKIT_BRANCH ]] && export PULUMI_SVMKIT_DIR=./pulumi-svmkit
+    SVMKIT_EXAMPLES_DIR=./svmkit-examples ./tests/test-svmkit --cleanup-on-failure "$$TEST_NAME"
+
+env:
+  PULUMI_ACCESS_TOKEN: "${PULUMI_ACCESS_TOKEN}"
+  PULUMI_ORG: "${PULUMI_ORG}"
+  AWS_DEFAULT_REGION: "us-west-2"
+
+steps:
+  - key: build
+    label: ":hammer_and_wrench: Build svmkit and pulumi-svmkit"
+    if: build.env("SVMKIT_BRANCH") != null || build.env("PULUMI_SVMKIT_BRANCH") != null
+    agents:
+      queue: "${AGENT_QUEUE:-default}"
+
+    command: |
+      source opsh
+      source .buildkite/git.opsh
+      source .buildkite/lib.opsh
+
+      git::repo-add git@github.com:abklabs/svmkit.git svmkit 
+      git::repo-add git@github.com:abklabs/pulumi-svmkit.git pulumi-svmkit 
+      git::repos-summary
+      git::repos-clone
+
+      echo "--- Building svmkit && pulumi-svmkit"
+      ( cd svmkit && make)
+      ( cd pulumi-svmkit && make)
+      tar -zcf pulumi-artifacts.tgz pulumi-svmkit/sdk pulumi-svmkit/bin
+
+    artifact_paths:
+      - pulumi-artifacts.tgz
+
+  - label: ":test_tube: Test aws-network-spe-py"
+    env:
+      CLOUD: aws
+      TEST_NAME: "test-aws-network-spe-py"
+    <<: *test-template
+
+  - label: ":test_tube: Test gcp-network-spe-ts"
+    env:
+      CLOUD: gcp
+      TEST_NAME: "test-gcp-network-spe-ts"
+    <<: *test-template
+
+  - label: ":test_tube: Test aws-validator-fd-ts"
+    env:
+      CLOUD: aws
+      TEST_NAME: "test-aws-validator-fd-ts"
+    <<: *test-template
+
+  - label: ":test_tube: Test aws-validator-agave-ts"
+    env:
+      CLOUD: aws
+      TEST_NAME: "test-aws-validator-agave-ts"
+    <<: *test-template
