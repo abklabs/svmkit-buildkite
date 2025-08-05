@@ -104,7 +104,7 @@ git::repo-clone() {
 		echo "⏩ Already a git repo: ${repo[dir]}"
 	else
 		local git_env=()
-		[[ -n "${repo[ssh_secret]:-}" ]] && git_env=("GIT_CONFIG_GLOBAL=/dev/null" "GIT_SSH_COMMAND=ssh -F $_OPSH_SSH_CONTEXT/config")
+		[[ -n "${repo[ssh_secret]:-}" ]] && git_env=("GIT_CONFIG_GLOBAL=/dev/null")
 		cmd=(env "${git_env[@]}" git clone)
 		[[ -n "${repo[options]}" ]] && cmd+=("${repo[options]}")
 		cmd+=("${repo[url]}" "${repo[dir]}")
@@ -145,7 +145,7 @@ git::repos-summary() {
 		local git_env=()
 		# if we have an ssh-secret defined, assume we are accessing with a key
 		# and ignore any repo settings to avoid git url rewrites
-		[[ -n "${repo[ssh_secret]:-}" ]] && git_env=("GIT_CONFIG_GLOBAL=/dev/null" "GIT_SSH_COMMAND=ssh -F $_OPSH_SSH_CONTEXT/config")
+		[[ -n "${repo[ssh_secret]:-}" ]] && git_env=("GIT_CONFIG_GLOBAL=/dev/null")
 
 		if ! read -r commit _ < <(env "${git_env[@]}" git ls-remote "$repo_url" "refs/heads/$branch"); then
 			echo "❌ Repo not found: $repo_url"
