@@ -81,3 +81,43 @@ steps:
         # with-local-pulumi-svmkit handles pulumi install
         with-local-pulumi-svmkit ../pulumi-svmkit with-pulumi-up with-rpc-forwarded prove --ext .ts --ext .t test
       )
+
+  - key: cleanup
+    label: ":broom: Cleanup wayward stacks"
+    <<: *default-agents
+    command: |
+      source opsh
+      source .buildkite/git.opsh
+
+      git::repo-add git@github.com:abklabs/solana-lab.git solana-lab
+      git::repos-summary
+      git::repos-clone
+
+      if [[ -n "${PULUMI_SVMKIT_DIR:-}" ]]; then
+        echo "-- Downloading Pulumi SDK and provider plugin artifacts"
+        buildkite-agent artifact download pulumi-artifacts.tgz .
+        tar zxf pulumi-artifacts.tgz
+      fi
+
+      CLOUD=aws  && . .buildkite/cloud-creds.sh
+      CLOUD=gcp  && . .buildkite/cloud-creds.sh
+      PULUMI_ACCESS_TOKEN=$(buildkite-agent secret get PULUMI_ACCESS_TOKEN)
+      (
+        cd solana-lab
+        if pulumi stack select "$$PULUMI_STACK_NAME" 2>/dev/null; then
+          echo "--- :warning: Stack '$$PULUMI_STACK_NAME' exists. Destroying..."
+          pulumi install
+          pulumi destroy --yes || echo "❌ Failed to destroy stack $$PULUMI_STACK_NAME"
+          if pulumi stack rm --yes; then
+             echo --- :white_check_mark: Stack '$$PULUMI_STACK_NAME' cleanup complete.
+          else
+             echo "--- :x: Failed to destroy stack $$PULUMI_STACK_NAME"
+             exit 1
+          fi
+        else
+          echo "--- :white_check_mark: Stack '$$PULUMI_STACK_NAME' does not exist. Nothing to destroy."
+        fi
+      )
+
+    depends_on: ["solana-lab"]
+    allow_dependency_failure: true
