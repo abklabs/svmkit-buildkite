@@ -6,6 +6,22 @@ declare -A GIT_REPOSITORIES
 
 # Usage:
 # git::repo-add <url> <dir> [--branch=name] [options] [--ssh-secret=SECRET_NAME] [--any_other=val]
+
+# Pull out any ssh keys and add them to the agent
+git::repos-add-ssh-keys() {
+	echo "--- :git: Adding ssh keys"
+
+	for repo_name in "${!GIT_REPOSITORIES[@]}"; do
+		local var_name="${GIT_REPOSITORIES[$repo_name]}"
+		declare -n repo="$var_name"
+
+		local git_env=()
+		if [[ -n "${repo[ssh_secret]:-}" ]]; then
+			buildkite-agent secret get "${repo[ssh_secret]}" | ssh::key::add
+		fi
+	done
+}
+
 # Add a repo
 git::repo-add() {
 	local url=""
