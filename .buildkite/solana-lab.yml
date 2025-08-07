@@ -81,7 +81,7 @@ steps:
       # 4) run tests
 
       # Add with-*pulumi* scripts to the path
-      PATH=$(realpath ./tooling/bin):$PATH;
+      PATH=$$(realpath ./tooling/bin):$$PATH
       (
         cd solana-lab
         bk::group "Setting up for Test Suite"
