@@ -6,13 +6,11 @@ env:
   AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-west-2}"
   GOOGLE_PROJECT: "${GOOGLE_PROJECT:-svmkit}"
   PULUMI_STACK_NAME: "abklabs/buildkite-solana-lab"
-  PULUMI_SVMKIT_DIR: "${PULUMI_SVMKIT_DIR:-./pulumi-svmkit}"
-  SVMKIT_DIR: "${SVMKIT_DIR:-./svmkit}"
 
 steps:
   - key: build
     label: ":hammer_and_wrench: Build svmkit and pulumi-svmkit"
-    if: build.env("SVMKIT_DIR") != null || build.env("PULUMI_SVMKIT_DIR") != null
+    if: build.env("SVMKIT_BRANCH") != null || build.env("PULUMI_SVMKIT_BRANCH") != null
     <<: *default-agents
 
     command: |
@@ -52,10 +50,13 @@ steps:
       # Get to work
       git::repos::clone
 
-      if [[ -n "${PULUMI_SVMKIT_DIR:-}" ]]; then
+      USE_PIPELINE_PULUMI_SVMKIT=false
+
+      if buildkite-agent artifact search pulumi-artifacts.tgz ; then
         echo "-- Downloading Pulumi SDK and provider plugin artifacts"
         buildkite-agent artifact download pulumi-artifacts.tgz .
         tar zxf pulumi-artifacts.tgz
+        USE_PIPELINE_PULUMI_SVMKIT=true
       fi
 
       setup-aws-credentials
@@ -72,8 +73,17 @@ steps:
         cd solana-lab
         echo "--- Setting up for Test Suite"
         pulumi stack init "$$PULUMI_STACK_NAME" || pulumi stack select "$$PULUMI_STACK_NAME" || true
+
+        PREFIX=()
+
+        if $$USE_PIPELINE_PULUMI_SVMKIT ; then
+           PREFIX+=(with-local-pulumi-svmkit ../pulumi-svmkit)
+        else
+           pulumi install
+        fi
+
         # with-local-pulumi-svmkit handles pulumi install
-        with-local-pulumi-svmkit ../pulumi-svmkit with-pulumi-up with-rpc-forwarded prove --ext .ts --ext .t test
+        "$${PREFIX[@]}" with-pulumi-up with-rpc-forwarded prove --ext .ts --ext .t test
       )
 
   - key: cleanup
@@ -86,10 +96,13 @@ steps:
       git::repos::summary
       git::repos::clone
 
-      if [[ -n "${PULUMI_SVMKIT_DIR:-}" ]]; then
+      USE_PIPELINE_PULUMI_SVMKIT=false
+
+      if buildkite-agent artifact search pulumi-artifacts.tgz ; then
         echo "-- Downloading Pulumi SDK and provider plugin artifacts"
         buildkite-agent artifact download pulumi-artifacts.tgz .
         tar zxf pulumi-artifacts.tgz
+        USE_PIPELINE_PULUMI_SVMKIT=true
       fi
 
       setup-aws-credentials
