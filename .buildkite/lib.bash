@@ -41,6 +41,7 @@ ssh::config <<EOF
 Host *
      UserKnownHostsFile /dev/null
      StrictHostKeyChecking no
+     LogLevel quiet
 EOF
 
 buildkite-agent secret get GITHUB_TOOLING_KEY | ssh::key::add
