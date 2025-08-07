@@ -30,7 +30,14 @@ steps:
       fi
 
       echo "--- Building pulumi-svmkit"
-      ( cd pulumi-svmkit && make)
+      (
+          cd pulumi-svmkit
+          if [[ -v SVMKIT_BRANCH ]] ; then
+              log::info "Patching pulumi-svmkit to use local svmkit"
+              ( cd provider && go mod edit -replace github.com/abklabs/svmkit/pkg=../../svmkit/pkg )
+          fi
+          make
+      )
       tar -zcf pulumi-artifacts.tgz pulumi-svmkit/sdk pulumi-svmkit/bin
 
     artifact_paths:
