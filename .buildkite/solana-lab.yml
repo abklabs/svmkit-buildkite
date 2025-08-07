@@ -25,11 +25,11 @@ steps:
       git::repos::clone
 
       if [[ -v SVMKIT_BRANCH ]] ; then
-          echo "--- Building svmkit"
+          bk::group "Building svmkit"
           ( cd svmkit && make)
       fi
 
-      echo "--- Building pulumi-svmkit"
+      bk::group "Building pulumi-svmkit"
       (
           cd pulumi-svmkit
           if [[ -v SVMKIT_BRANCH ]] ; then
@@ -64,9 +64,9 @@ steps:
 
       USE_PIPELINE_PULUMI_SVMKIT=false
 
-      echo "--- Searching for pipeline build of pulumi-svmkit"
+      bk::group "Searching for pipeline build of pulumi-svmkit"
       if buildkite-agent artifact search pulumi-artifacts.tgz ; then
-        echo "-- Downloading Pulumi SDK and provider plugin artifacts"
+        log::info "Downloading Pulumi SDK and provider plugin artifacts"
         buildkite-agent artifact download pulumi-artifacts.tgz .
         tar zxf pulumi-artifacts.tgz
         USE_PIPELINE_PULUMI_SVMKIT=true
@@ -84,7 +84,7 @@ steps:
       PATH=$(realpath ./tooling/bin):$PATH;
       (
         cd solana-lab
-        echo "--- Setting up for Test Suite"
+        bk::group "Setting up for Test Suite"
         pulumi stack init "$$PULUMI_STACK_NAME" || pulumi stack select "$$PULUMI_STACK_NAME" || true
 
         PREFIX=()
@@ -113,7 +113,7 @@ steps:
 
       USE_PIPELINE_PULUMI_SVMKIT=false
 
-      echo "--- Searching for pipeline build of pulumi-svmkit"
+      bk::group "Searching for pipeline build of pulumi-svmkit"
       if buildkite-agent artifact search pulumi-artifacts.tgz ; then
         echo "-- Downloading Pulumi SDK and provider plugin artifacts"
         buildkite-agent artifact download pulumi-artifacts.tgz .
@@ -126,17 +126,17 @@ steps:
       (
         cd solana-lab
         if pulumi stack select "$$PULUMI_STACK_NAME" 2>/dev/null; then
-          echo "--- :warning: Stack '$$PULUMI_STACK_NAME' exists. Destroying..."
+          bk::group ":warning: Stack '$$PULUMI_STACK_NAME' exists. Destroying..."
           pulumi install
           pulumi destroy --yes || echo "❌ Failed to destroy stack $$PULUMI_STACK_NAME"
           if pulumi stack rm --yes; then
-             echo "--- :white_check_mark: Stack '$$PULUMI_STACK_NAME' cleanup complete."
+             bk::group ":white_check_mark: Stack '$$PULUMI_STACK_NAME' cleanup complete."
           else
-             echo "--- :x: Failed to destroy stack $$PULUMI_STACK_NAME"
+             bk::group ":x: Failed to destroy stack $$PULUMI_STACK_NAME"
              exit 1
           fi
         else
-          echo "--- :white_check_mark: Stack '$$PULUMI_STACK_NAME' does not exist. Nothing to destroy."
+          bk::group ":white_check_mark: Stack '$$PULUMI_STACK_NAME' does not exist. Nothing to destroy."
         fi
       )
 

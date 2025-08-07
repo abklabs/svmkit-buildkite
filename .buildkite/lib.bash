@@ -3,6 +3,7 @@
 # shellcheck disable=SC1091 # this will be in our PATH at runtime
 source opsh
 source "$(realpath "$(dirname "${BASH_SOURCE[0]}")")/git.opsh"
+source "$(realpath "$(dirname "${BASH_SOURCE[0]}")")/buildkite.opsh"
 
 lib::import ssh
 
