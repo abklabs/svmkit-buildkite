@@ -1,6 +1,11 @@
 # svmkit-buildkite
 Buildkite integration for SVMKIt
 
+To tigger a pipeline with specific branch  specified (pipeline needs to support this) run:
+```
+$ ./bin/buildkite-trigger  --repo ../pulumi-svmkit --repo ../svmkit --repo ../tooling --repo  ../solana-lab/ --repo ../svmkit-buildkite MY-PIPELNE-NAME
+```
+
 ## Secrets Required
 The following secrets need to be provisioned with the appropriate service
 and then set in the [`Buildkite Secrets API.`](https://buildkite.com/docs/pipelines/security/secrets/buildkite-secrets)
