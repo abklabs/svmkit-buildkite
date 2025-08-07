@@ -43,5 +43,7 @@ Host *
      StrictHostKeyChecking no
 EOF
 
+buildkite-agent secret get GITHUB_TOOLING_KEY | ssh::key::add
+
 PULUMI_ACCESS_TOKEN="$(buildkite-agent secret get PULUMI_ACCESS_TOKEN)"
 export PULUMI_ACCESS_TOKEN
