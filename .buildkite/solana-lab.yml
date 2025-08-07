@@ -50,6 +50,7 @@ steps:
 
       USE_PIPELINE_PULUMI_SVMKIT=false
 
+      echo "--- Searching for pipeline build of pulumi-svmkit"
       if buildkite-agent artifact search pulumi-artifacts.tgz ; then
         echo "-- Downloading Pulumi SDK and provider plugin artifacts"
         buildkite-agent artifact download pulumi-artifacts.tgz .
@@ -96,6 +97,7 @@ steps:
 
       USE_PIPELINE_PULUMI_SVMKIT=false
 
+      echo "--- Searching for pipeline build of pulumi-svmkit"
       if buildkite-agent artifact search pulumi-artifacts.tgz ; then
         echo "-- Downloading Pulumi SDK and provider plugin artifacts"
         buildkite-agent artifact download pulumi-artifacts.tgz .
