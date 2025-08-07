@@ -90,8 +90,10 @@ steps:
         PREFIX=()
 
         if $$USE_PIPELINE_PULUMI_SVMKIT ; then
+           log::info "Using a pipeline build of pulumi-svmkit"
            PREFIX+=(with-local-pulumi-svmkit ../pulumi-svmkit)
         else
+           log::info "Using the released pulumi-svmkit"
            pulumi install
         fi
 
