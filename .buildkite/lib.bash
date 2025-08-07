@@ -31,6 +31,9 @@ setup-gcp-credentials() {
 		GOOGLE_APPLICATION_CREDENTIALS
 }
 
+# Disable buildkite's default remote rewrite config
+git config --global --remove-section 'url.https://github.com/'
+
 ssh::begin
 
 # Configure SSH to ignore host key checking
