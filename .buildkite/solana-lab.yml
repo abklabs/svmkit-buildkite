@@ -17,9 +17,7 @@ steps:
     <<: *default-agents
 
     command: |
-      source opsh
-      source .buildkite/git.opsh
-      source .buildkite/lib.opsh
+      source .buildkite/lib.bash
 
       git::repos::add git@github.com:abklabs/svmkit.git svmkit 
       git::repos::add git@github.com:abklabs/pulumi-svmkit.git pulumi-svmkit 
@@ -42,11 +40,8 @@ steps:
     concurrency_group: pulumi-testing
 
     command: |
-      source opsh
-      source .buildkite/git.opsh
-      source .buildkite/lib.opsh
+      source .buildkite/lib.bash
 
-      ssh::setup
 
       git::repos::add git@github.com:abklabs/solana-lab.git solana-lab
       git::repos::add git@github.com:abklabs/tooling.git tooling --ssh-secret GITHUB_TOOLING_KEY
@@ -89,8 +84,7 @@ steps:
     label: ":broom: Cleanup wayward stacks"
     <<: *default-agents
     command: |
-      source opsh
-      source .buildkite/git.opsh
+      source .buildkite/lib.bash
 
       git::repos::add git@github.com:abklabs/solana-lab.git solana-lab
       git::repos::summary
