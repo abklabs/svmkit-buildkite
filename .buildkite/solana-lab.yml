@@ -85,7 +85,8 @@ steps:
       (
         cd solana-lab
         bk::group "Setting up for Test Suite"
-        pulumi stack init "$$PULUMI_STACK_NAME" || pulumi stack select "$$PULUMI_STACK_NAME" || true
+        pulumi stack init "$$PULUMI_STACK_NAME"
+        pulumi stack select "$$PULUMI_STACK_NAME"
 
         PREFIX=()
 
