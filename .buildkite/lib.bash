@@ -19,8 +19,7 @@ setup-gcp-credentials() {
 	: "${GOOGLE_ZONE:=${GOOGLE_REGION}-a}"
 
 	GCP_SA_KEY="$(buildkite-agent secret get GCP_SA_KEY)"
-	trap 'rm -f "$GCP_SA_KEY_FILE"' EXIT INT TERM
-	GCP_SA_KEY_FILE="$(mktemp /tmp/sa-key-XXXXXX.json)"
+	GCP_SA_KEY_FILE="$(temp::file)"
 	chmod 600 "$GCP_SA_KEY_FILE"
 	echo "$GCP_SA_KEY" >"$GCP_SA_KEY_FILE"
 	GOOGLE_APPLICATION_CREDENTIALS="$GCP_SA_KEY_FILE"
