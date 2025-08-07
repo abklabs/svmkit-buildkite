@@ -62,16 +62,6 @@ steps:
       # Get to work
       git::repos::clone
 
-      USE_PIPELINE_PULUMI_SVMKIT=false
-
-      bk::group "Searching for pipeline build of pulumi-svmkit"
-      if buildkite-agent artifact search pulumi-artifacts.tgz ; then
-        log::info "Downloading Pulumi SDK and provider plugin artifacts"
-        buildkite-agent artifact download pulumi-artifacts.tgz .
-        tar zxf pulumi-artifacts.tgz
-        USE_PIPELINE_PULUMI_SVMKIT=true
-      fi
-
       setup-aws-credentials
       setup-gcp-credentials
 
@@ -87,20 +77,8 @@ steps:
         bk::group "Setting up for Test Suite"
         pulumi stack init "$$PULUMI_STACK_NAME"
         pulumi stack select "$$PULUMI_STACK_NAME"
-
-        PREFIX=()
-
-        if $$USE_PIPELINE_PULUMI_SVMKIT ; then
-           log::info "Using a pipeline build of pulumi-svmkit"
-           PREFIX+=(with-local-pulumi-svmkit ../pulumi-svmkit)
-        else
-           log::info "Using the released pulumi-svmkit"
-           pulumi install
-        fi
-
         # with-local-pulumi-svmkit handles pulumi install
-        "$${PREFIX[@]}" with-pulumi-up with-rpc-forwarded prove --ext .ts --ext .t test
-
+        pulumi-install-and-run with-pulumi-up with-rpc-forwarded prove --ext .ts --ext .t test
         pulumi stack rm --yes
       )
 
@@ -119,34 +97,13 @@ steps:
         bk::group ":white_check_mark: Stack '$$PULUMI_STACK_NAME' does not exist. Nothing to destroy."
         exit 0
       fi
-
-      USE_PIPELINE_PULUMI_SVMKIT=false
-
-      bk::group "Searching for pipeline build of pulumi-svmkit"
-      if buildkite-agent artifact search pulumi-artifacts.tgz ; then
-        echo "-- Downloading Pulumi SDK and provider plugin artifacts"
-        buildkite-agent artifact download pulumi-artifacts.tgz .
-        tar zxf pulumi-artifacts.tgz
-        USE_PIPELINE_PULUMI_SVMKIT=true
-      fi
-
       setup-aws-credentials
       setup-gcp-credentials
 
       PATH=$$(realpath ./tooling/bin):$$PATH
       (
         cd solana-lab
-
-        PREFIX=()
-        if $$USE_PIPELINE_PULUMI_SVMKIT ; then
-          log::info "Using a pipeline build of pulumi-svmkit"
-          PREFIX+=(with-local-pulumi-svmkit ../pulumi-svmkit)
-        else
-          log::info "Using the released pulumi-svmkit"
-          pulumi install
-        fi
-
-        "$${PREFIX[@]}" cleanup-pulumi-stack "$$PULUMI_STACK_NAME"
+        pulumi-install-and-run cleanup-pulumi-stack "$$PULUMI_STACK_NAME"
       )
 
     depends_on: ["solana-lab"]

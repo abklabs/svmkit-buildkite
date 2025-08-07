@@ -31,6 +31,34 @@ setup-gcp-credentials() {
 		GOOGLE_APPLICATION_CREDENTIALS
 }
 
+get-pipeline-pulumi-svmkit() {
+    local outdir
+    outdir=$1 ; shift
+
+    bk::group "Searching for pipeline build of pulumi-svmkit"
+    buildkite-agent artifact search pulumi-artifacts.tgz || return 1
+
+    log::info "Downloading Pulumi SDK and provider plugin artifacts"
+    buildkite-agent artifact download pulumi-artifacts.tgz "$outdir"
+    ( cd "$outdir" && tar zxf pulumi-artifacts.tgz )
+    return 0
+}
+
+pulumi-install-and-run() {
+    local prefix
+
+    prefix=()
+    if get-pipeline-pulumi-svmkit .. ; then
+        log::info "Using a pipeline build of pulumi-svmkit"
+        prefix+=(with-local-pulumi-svmkit ../pulumi-svmkit)
+    else
+        log::info "Using the released pulumi-svmkit"
+        pulumi install
+    fi
+
+    "${prefix[@]}" "$@"
+}
+
 # Disable buildkite's default remote rewrite config
 git config --global --remove-section 'url.https://github.com/'
 
