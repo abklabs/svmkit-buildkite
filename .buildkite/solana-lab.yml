@@ -59,8 +59,8 @@ steps:
         tar zxf pulumi-artifacts.tgz
       fi
 
-      CLOUD=aws  && . .buildkite/cloud-creds.sh
-      CLOUD=gcp  && . .buildkite/cloud-creds.sh
+      setup-aws-credentials
+      setup-gcp-credentials
       PULUMI_ACCESS_TOKEN=$(buildkite-agent secret get PULUMI_ACCESS_TOKEN)
 
       # Now that we are here, go to solana-lab:
@@ -94,8 +94,8 @@ steps:
         tar zxf pulumi-artifacts.tgz
       fi
 
-      CLOUD=aws  && . .buildkite/cloud-creds.sh
-      CLOUD=gcp  && . .buildkite/cloud-creds.sh
+      setup-aws-credentials
+      setup-gcp-credentials
       PULUMI_ACCESS_TOKEN=$(buildkite-agent secret get PULUMI_ACCESS_TOKEN)
       (
         cd solana-lab
