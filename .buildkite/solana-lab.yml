@@ -5,7 +5,6 @@ x-default-agents: &default-agents
 env:
   AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-west-2}"
   GOOGLE_PROJECT: "${GOOGLE_PROJECT:-svmkit}"
-  PULUMI_ACCESS_TOKEN: "${PULUMI_ACCESS_TOKEN:-}"
   PULUMI_STACK_NAME: "abklabs/buildkite-solana-lab"
   PULUMI_SVMKIT_DIR: "${PULUMI_SVMKIT_DIR:-./pulumi-svmkit}"
   SVMKIT_DIR: "${SVMKIT_DIR:-./svmkit}"
@@ -61,7 +60,6 @@ steps:
 
       setup-aws-credentials
       setup-gcp-credentials
-      PULUMI_ACCESS_TOKEN=$(buildkite-agent secret get PULUMI_ACCESS_TOKEN)
 
       # Now that we are here, go to solana-lab:
       # 1) Install pulumi
@@ -96,7 +94,6 @@ steps:
 
       setup-aws-credentials
       setup-gcp-credentials
-      PULUMI_ACCESS_TOKEN=$(buildkite-agent secret get PULUMI_ACCESS_TOKEN)
       (
         cd solana-lab
         if pulumi stack select "$$PULUMI_STACK_NAME" 2>/dev/null; then
