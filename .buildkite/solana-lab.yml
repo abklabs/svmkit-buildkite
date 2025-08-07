@@ -16,13 +16,20 @@ steps:
     command: |
       source .buildkite/lib.bash
 
-      git::repos::add git@github.com:abklabs/svmkit.git svmkit 
+      if [[ -v SVMKIT_BRANCH ]] ; then
+          git::repos::add git@github.com:abklabs/svmkit.git svmkit
+      fi
+
       git::repos::add git@github.com:abklabs/pulumi-svmkit.git pulumi-svmkit 
       git::repos::summary
       git::repos::clone
 
-      echo "--- Building svmkit && pulumi-svmkit"
-      ( cd svmkit && make)
+      if [[ -v SVMKIT_BRANCH ]] ; then
+          echo "--- Building svmkit"
+          ( cd svmkit && make)
+      fi
+
+      echo "--- Building pulumi-svmkit"
       ( cd pulumi-svmkit && make)
       tar -zcf pulumi-artifacts.tgz pulumi-svmkit/sdk pulumi-svmkit/bin
 
