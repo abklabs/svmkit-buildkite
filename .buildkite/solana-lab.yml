@@ -42,12 +42,10 @@ steps:
     command: |
       source .buildkite/lib.bash
 
+      buildkite-agent secret get GITHUB_TOOLING_KEY | ssh::key::add
 
       git::repos::add git@github.com:abklabs/solana-lab.git solana-lab
-      git::repos::add git@github.com:abklabs/tooling.git tooling --ssh-secret GITHUB_TOOLING_KEY
-
-      # Add ssh keys (need them for tooling repo)
-      git::repos::ssh::keys::add
+      git::repos::add git@github.com:abklabs/tooling.git tooling
 
       # Build kite section describing branches
       git::repos::summary
