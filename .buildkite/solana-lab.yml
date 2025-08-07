@@ -99,6 +99,8 @@ steps:
 
         # with-local-pulumi-svmkit handles pulumi install
         "$${PREFIX[@]}" with-pulumi-up with-rpc-forwarded prove --ext .ts --ext .t test
+
+        pulumi stack rm --yes
       )
 
   - key: cleanup
