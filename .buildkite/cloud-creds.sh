@@ -23,7 +23,7 @@ gcp)
 	trap 'rm -f "$GCP_SA_KEY_FILE"' EXIT INT TERM
 	GCP_SA_KEY_FILE="$(mktemp /tmp/sa-key-XXXXXX.json)"
 	chmod 600 "$GCP_SA_KEY_FILE"
-	echo "$GCP_SA_KEY" > "$GCP_SA_KEY_FILE"
+	echo "$GCP_SA_KEY" >"$GCP_SA_KEY_FILE"
 	GOOGLE_APPLICATION_CREDENTIALS="$GCP_SA_KEY_FILE"
 	gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
 	gcloud config set project "$GOOGLE_PROJECT"
