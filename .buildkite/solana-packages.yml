@@ -1,0 +1,25 @@
+x-default-agents: &default-agents
+  agents:
+    queue: "${AGENT_QUEUE:-packages}"
+
+steps:
+  - key: build-solana-packages
+    label: ":hammer_and_wrench: solana-packages"
+    <<: *default-agents
+
+    command: |
+      source .buildkite/lib.bash
+
+      git::repos::add git@github.com:abklabs/svmkit
+      git::repos::add https://github.com/solana-labs/solana
+      git::repos::summary
+      git::repos::clone
+
+      # add the repos to git/config
+      cat .buildkite/solana-packages/git.config >> solana/.git/config
+
+      bk::group "Building packages for $$REMOTE $$TAG"
+      ( cd solana && ../svmkit/build/solana-build  "$$REMOTE" "$$TAG" )
+
+    artifact_paths:
+      - build/*.deb
