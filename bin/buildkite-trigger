@@ -161,8 +161,14 @@ curl_cmd=(
 if $DRY_RUN; then
 	echo "${curl_cmd[@]/${BUILDKITE_API_TOKEN}/\$BUILDKITE_API_TOKEN}"
 else
-	response=$("${curl_cmd[@]}")
-	build_url=$(jq -r '.web_url' <<<"$response")
+	response=$(temp::file)
+	"${curl_cmd[@]}" >"$response"
+	build_url=$(jq -r '.web_url' <"$response")
 
-	log::info "Build triggered: $build_url"
+	if [[ $build_url == null ]]; then
+		log::error "Build failed"
+		cat "$response"
+	else
+		log::info "Build triggered: $build_url"
+	fi
 fi
