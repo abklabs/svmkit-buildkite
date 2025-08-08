@@ -1,0 +1,145 @@
+#!/usr/bin/env opsh
+# shellcheck shell=bash
+set -euo pipefail
+lib::import common
+git_opsh="${SCRIPTDIR}/../.buildkite/git.opsh"
+
+# shellcheck disable=SC1090
+source "$git_opsh"
+
+# === Config ===
+ORG="svmkit"
+COMMIT="HEAD"
+BRANCH="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
+MESSAGE="Triggered from script"
+
+# === Derived values ===
+REPOS=()
+DRY_RUN=false
+FORCE=false
+
+usage() {
+	cat >&2 <<EOF
+Usage: $0 [options] PIPELINE
+
+   Trigger buildkite pipeline for a set of local repos.
+   Branch information is pulled from local repos specifed in the --repo
+   flag and passed as environment variables to buildkite.  The pipline
+   needs to support this convention.  Branch info is passed as
+   <REPO>_BRANCH environment variables.
+
+Options:
+  --repo <path>       Include the given repo (can be used multiple times)
+  -n, --dry-run       Print the API call instead of triggering the build
+  -m, --message <msg> Set the build message (default: "Triggered from script")
+  -h, --help          Show this help message and exit
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	-r | --repo)
+		REPOS+=("$2")
+		shift 2
+		;;
+	-n | --dry-run)
+		DRY_RUN=true
+		shift
+		;;
+	-f | --force)
+		FORCE=true
+		shift
+		;;
+	-m | --message)
+		MESSAGE="$2"
+		shift 2
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	--* | -*)
+		log::fatal "Unknown option: $1" >&2
+		;;
+	*)
+		[[ -n "${PIPELINE:-}" ]] && log::fatal "Error: Multiple pipeline names specified: '$PIPELINE' and '$1'" >&2
+		PIPELINE="$1"
+		shift
+		;;
+	esac
+done
+
+if [[ -z "${PIPELINE:-}" ]]; then
+	usage
+	exit 1
+fi
+
+# === Collect env vars ===
+declare -A env_map
+
+out_of_sync=0
+for repo_path in "${REPOS[@]}"; do
+	if [[ -d "$repo_path/.git" ]]; then
+		pushd "$repo_path" >/dev/null
+		output="$(git::repo::validate "$repo_path")" || ((out_of_sync += 1))
+		IFS=' ' read -r repo_name repo_branch _ <<<"$output"
+		branch_env_var=$(git::repo::branch-var "$repo_name")
+		env_map["$branch_env_var"]="$repo_branch"
+		popd >/dev/null
+	else
+		log::error "$repo_path is not a valid Git repository"
+		((out_of_sync += 1))
+	fi
+done
+
+if [[ "$FORCE" == false && "$out_of_sync" -gt 0 ]]; then
+	echo "$out_of_sync repositories are out of sync."
+	exit 1
+fi
+
+# === Convert to JSON ===
+ENV_VARS_JSON="{"
+first=true
+for key in "${!env_map[@]}"; do
+	[[ $first == true ]] && first=false || ENV_VARS_JSON+=","
+	val=${env_map[$key]}
+	if [[ $val == null ]]; then
+		ENV_VARS_JSON+="\"$key\": null"
+	else
+		escaped=$(jq -Rn --arg v "$val" '$v')
+		ENV_VARS_JSON+="\"$key\": ${escaped}"
+	fi
+done
+ENV_VARS_JSON+="}"
+
+# === Output or Trigger ===
+build_payload=$(
+	jq -n \
+		--arg commit "$COMMIT" \
+		--arg branch "$BRANCH" \
+		--arg message "$MESSAGE" \
+		--argjson env "$ENV_VARS_JSON" \
+		'{
+	    "commit": $commit,
+	    "branch": $branch,
+	    "message": $message,
+	    "env": $env
+	  }'
+)
+
+curl_cmd=(
+	curl -s -X POST
+	"https://api.buildkite.com/v2/organizations/$ORG/pipelines/$PIPELINE/builds"
+	-H "Authorization: Bearer ${BUILDKITE_API_TOKEN:-BUILDKITE_API_TOKEN_NOT_SET}"
+	-H "Content-Type: application/json"
+	-d "$build_payload"
+)
+
+if $DRY_RUN; then
+	echo "${curl_cmd[@]/${BUILDKITE_API_TOKEN}/\$BUILDKITE_API_TOKEN}"
+else
+	response=$("${curl_cmd[@]}")
+	build_url=$(jq -r '.web_url' <<<"$response")
+
+	log::info "Build triggered: $build_url"
+fi
