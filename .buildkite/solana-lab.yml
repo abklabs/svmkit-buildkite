@@ -55,29 +55,18 @@ steps:
 
       git::repos::add git@github.com:abklabs/solana-lab.git solana-lab
       git::repos::add git@github.com:abklabs/tooling.git tooling
-
-      # Build kite section describing branches
       git::repos::summary
-
-      # Get to work
       git::repos::clone
 
       setup-aws-credentials
       setup-gcp-credentials
 
-      # Now that we are here, go to solana-lab:
-      # 1) Install pulumi
-      # 2) Create a stack
-      # 4) run tests
-
-      # Add with-*pulumi* scripts to the path
       PATH=$$(realpath ./tooling/bin):$$PATH
       (
         cd solana-lab
         bk::group "Setting up for Test Suite"
         pulumi stack init "$$PULUMI_STACK_NAME"
         pulumi stack select "$$PULUMI_STACK_NAME"
-        # with-local-pulumi-svmkit handles pulumi install
         pulumi-install-and-run with-pulumi-up with-rpc-forwarded prove --ext .ts --ext .t test
         pulumi stack rm --yes
       )
@@ -97,6 +86,7 @@ steps:
         bk::group ":white_check_mark: Stack '$$PULUMI_STACK_NAME' does not exist. Nothing to destroy."
         exit 0
       fi
+
       setup-aws-credentials
       setup-gcp-credentials
 
