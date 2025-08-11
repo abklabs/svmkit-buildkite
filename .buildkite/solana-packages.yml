@@ -10,6 +10,17 @@ steps:
     command: |
       source .buildkite/lib.bash
 
+      # Grab packages from a another build rather than building here.
+      if [[ -v ARTIFACT_PATTERN ]]; then
+        : "$${PARENT_BUILD_ID:?PARENT_BUILD_ID is required}p"
+        bk::group "Getting Artifacts"
+        buildkite-agent artifact download "$ARTIFACT_PATTERN" . --build "$PARENT_BUILD_ID"
+        exit 0
+      fi
+
+      [[ -v REMOTE ]] || log::fatal "Must specify REMOTE"
+      [[ -v TAG ]] || log::fatal "Must specify TAG"
+
       git::repos::add git@github.com:abklabs/svmkit
       git::repos::add https://github.com/solana-labs/solana
       git::repos::summary
@@ -23,3 +34,16 @@ steps:
 
     artifact_paths:
       - build/*.deb
+
+  - label: "Testing $BUILDKITE_BUILD_URL"
+    depends_on: build-solana-packages
+    trigger: solana-lab
+    async: false
+    build:
+      branch: "${SVMKIT_BUILDKITE_BRANCH:-${BUILDKITE_BRANCH}}"
+      env:
+        SVMKIT_BRANCH: ${SVMKIT_BRANCH:-}
+        TOOLING_BRANCH: ${TOOLING_BRANCH:-}
+        SOLANA_LAB_BRANCH: ${SOLANA_LAB_BRANCH:-}
+        PARENT_BUILD_ID: "${BUILDKITE_BUILD_ID}"
+        ARTIFACT_PATTERN: "build/*"

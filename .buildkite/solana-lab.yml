@@ -64,6 +64,13 @@ steps:
       PATH=$$(realpath ./tooling/bin):$$PATH
       (
         cd solana-lab
+        if [[ -v ARTIFACT_PATTERN ]]; then
+          : "$${PARENT_BUILD_ID:?PARENT_BUILD_ID is required}"
+          mkdir -p dist
+          bk::group "Getting Artifacts"
+          buildkite-agent artifact download "$ARTIFACT_PATTERN" . --build "$PARENT_BUILD_ID"
+        fi
+        
         bk::group "Setting up for Test Suite"
         pulumi stack init "$$PULUMI_STACK_NAME"
         pulumi stack select "$$PULUMI_STACK_NAME"
