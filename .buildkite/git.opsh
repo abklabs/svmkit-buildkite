@@ -21,6 +21,15 @@ git::repo::branch-var() {
 	echo "${branch_var}_BRANCH"
 }
 
+git::default-branch() {
+	[[ -n ${1:-} ]] || log::fatal "${FUNCNAME[0]} url"
+	local url=$1
+	git ls-remote --symref "$url" HEAD | {
+		IFS=$' \t\n' read -r _ ref _ || exit 1
+		echo "${ref#refs/heads/}"
+	}
+}
+
 git::repos::get() {
 	if [[ $# -lt 2 ]]; then
 		log::error "Usage: ${FUNCNAME[0]} <repo> [url|dir|branch|options|ssh-secret]" >&2
@@ -67,8 +76,8 @@ git::repos::add() {
 
 	local url=$1
 	shift
-	local branch="main" ssh_secret="" options=""
-	local dir
+	local ssh_secret="" options=""
+	local dir branch branch_var
 
 	# If no second argument or it's an option (starts with --),
 	# default dir to basename of URL
@@ -81,9 +90,8 @@ git::repos::add() {
 
 	# If an env var of the format <REPO>_BRANCH exists,
 	# use that as the default branch.
-	local branch_var
 	branch_var=$(git::repo::branch-var "$url")
-	branch=${!branch_var:-main}
+	branch=${!branch_var:-}
 
 	# Parse options.  Allow "--option value" or "--option=value"
 	while [[ $# -gt 0 ]]; do
@@ -115,6 +123,8 @@ git::repos::add() {
 		esac
 		shift
 	done
+
+	[[ -n "${branch:-}" ]] || branch="$(git::default-branch "$url")"
 
 	local name
 	name=$(git::repo::name "$url")
