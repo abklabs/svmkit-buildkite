@@ -30,10 +30,12 @@ Usage: $0 [options] PIPELINE
    <REPO>_BRANCH environment variables.
 
 Options:
-  --repo <path>       Include the given repo (can be used multiple times)
-  -n, --dry-run       Print the API call instead of triggering the build
-  -m, --message <msg> Set the build message (default: "Triggered from script")
-  -h, --help          Show this help message and exit
+  -E, --env  var=value  Set an environment varible for the pipeline
+  -f, --force		Force trigger even if local repos are out of sync
+  -h, --help            Show this help message and exit
+  -m, --message <msg>   Set the build message (default: "Triggered from script")
+  -n, --dry-run         Print the API call instead of triggering the build
+  -r, --repo <path>	Include the given repo (can be used multiple times)
 EOF
 }
 
