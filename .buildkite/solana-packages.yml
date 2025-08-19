@@ -26,3 +26,17 @@ steps:
 
     artifact_paths:
       - build/*.deb
+
+  - label: "Testing $BUILDKITE_BUILD_URL"
+    depends_on: build-solana-packages
+    trigger: solana-lab
+    async: false
+    build:
+      branch: "${SVMKIT_BUILDKITE_BRANCH:-${BUILDKITE_BRANCH}}"
+      env:
+        SVMKIT_BRANCH: ${SVMKIT_BRANCH:-}
+        PULUMI_SVMKIT_BRANCH: ${PULUMI_SVMKIT_BRANCH:-}
+        TOOLING_BRANCH: ${TOOLING_BRANCH:-}
+        SOLANA_LAB_BRANCH: ${SOLANA_LAB_BRANCH:-}
+        PARENT_BUILD_ID: "${BUILDKITE_BUILD_ID}"
+        ARTIFACT_PATTERN: "build/*"
