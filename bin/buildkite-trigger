@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 set -euo pipefail
 lib::import common
-git_opsh="${SCRIPTDIR}/../.buildkite/git.opsh"
+git_opsh="${SCRIPTDIR}/../lib/git.opsh"
 
 # shellcheck disable=SC1090
 source "$git_opsh"

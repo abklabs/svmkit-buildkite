@@ -41,7 +41,7 @@ Options:
   -r, --repo <path>	Include the given repo (can be used multiple times)
 ```
 
-## Solana Packages (.buildkite/solana-packages.yml)
+## Solana Packages (solana-packages.yml)
 This pipeline builds Debian packages for the solana project using the
 svmkit/build/solana-build script.
 
@@ -56,7 +56,7 @@ svmkit/build/solana-build script.
 | `TOOLING_BRANCH`       | N        | git@github.com:abklabs/tooling branch       |
 | `SOLANA_LAB_BRANCH`    | N        | git@github.com:abklabs/solana-lab branch    |
 
-## Solana Lab (.buildkite/solana-packages.yml)
+## Solana Lab (solana-packages.yml)
 This pipeline instantiates a Solana Lab instances
 (git@github.com:abklabs/solana-lab) and performs TAP tests defined in
 git@github.com:abklabs/solana-lab/test
@@ -72,7 +72,7 @@ git@github.com:abklabs/solana-lab/test
 | `ARTIFACT_PATTERN`     | N        | Artifacts to download                       |
 
 
-## SVMKit Examples (.buildkite/svmit-examples.yml)
+## SVMKit Examples (svmit-examples.yml)
 This pipeline is designed to build SVMKit and the Pulumi provider and
 run example cloud instantiations in AWS and GCP.
 
