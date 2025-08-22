@@ -1,19 +1,20 @@
-
 # SVMkit Buildkite Pipelines
+
 This repository contains Buildkite pipelines for building and testing
 SVMKit.
 
 Pipeline secrets are handled by [Buildkite Secrets](https://buildkite.com/docs/pipelines/security/secrets/buildkite-secrets)
 
-Environment variable are used to modify execution.  The avaiable
+Environment variable are used to modify execution. The avaiable
 variables are described below for each pipeline.
 
 ## Secrets Required
+
 Before running any tests, the following secrets need to be provisioned
 and then set in the [`Buildkite Secrets API.`](https://buildkite.com/docs/pipelines/security/secrets/buildkite-secrets)
 
 | Service             | Name                    | Description                                                                                                                                                                                            |
-|---------------------|-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Pulumi              | `PULUMI_ACCESS_TOKEN`   | For details, see the official documentation on [creating a Pulumi access token](https://www.pulumi.com/docs/pulumi-cloud/access-management/access-tokens/).                                            |
 | Amazon Web Services | `AWS_ACCESS_KEY_ID`     | AWS ID. For details, see the official documentation on [creating an AWS access key](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys).         |
 | Amazon Web Services | `AWS_SECRET_ACCESS_KEY` | AWS Key. For details, see the official documentation on [creating an AWS secret access key](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html#access-keys-and-secret-access-keys). |
@@ -21,9 +22,11 @@ and then set in the [`Buildkite Secrets API.`](https://buildkite.com/docs/pipeli
 | Github              | `GITHUB_TOOLING_KEY`    | Needed for private repo access                                                                                                                                                                         |
 
 ## Triggering pipelines
+
 To trigger a pipeline, the `buildkite-trigger` script can be used to simplify the process
+
 ```
-$ ./bin/buildkite-trigger --help 
+$ ./bin/buildkite-trigger --help
 Usage: ./bin/buildkite-trigger [options] PIPELINE
 
    Trigger buildkite pipeline for a set of local repos.
@@ -86,17 +89,17 @@ run example cloud instantiations in AWS and GCP.
  * `test-gcp-validator-agave-ts`
 
 ### Notes on Google Cloud
+
 When creating the secret for `GCP_SA_KEY`
 (`GOOGLE_SERVICE_ACCOUNT_KEY`) the service account must have these IAM
 roles:
-	* roles/serviceusage.serviceUsageViewer
-	* roles/compute.viewer
-	* roles/compute.instanceAdmin.v1
-	* roles/compute.networkAdmin
-	* roles/compute.securityAdmin
-
+_ roles/serviceusage.serviceUsageViewer
+_ roles/compute.viewer
+_ roles/compute.instanceAdmin.v1
+_ roles/compute.networkAdmin \* roles/compute.securityAdmin
 
 This can be done using the gcloud CLI:
+
 ```
 PROJECT=my-gcloud-project
 SA=svmkit-buildkite@${PROJECT}.iam.gserviceaccount.com
