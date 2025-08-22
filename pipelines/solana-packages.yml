@@ -2,6 +2,9 @@ x-default-agents: &default-agents
   agents:
     queue: "${AGENT_QUEUE:-packages}"
 
+env:
+  DRY_RUN: "${DRY_RUN:-false}"
+
 steps:
   - key: build-solana-packages
     label: ":hammer_and_wrench: solana-packages"
@@ -21,9 +24,12 @@ steps:
       # add the repos to git/config
       cat ./solana-packages/git.config >> solana/.git/config
 
-      bk::group "Building packages for $$REMOTE $$TAG"
-      ( cd solana && ../svmkit/build/solana-build  "$$REMOTE" "$$TAG" )
-
+      if ! $$DRY_RUN ; then
+        bk::group "Building packages for $$REMOTE $$TAG"
+        ( cd solana && ../svmkit/build/solana-build  "$$REMOTE" "$$TAG" )
+      else
+        bk::group "Skipping building pacakges"
+      fi
     artifact_paths:
       - build/*.deb
 
@@ -31,6 +37,7 @@ steps:
     depends_on: build-solana-packages
     trigger: solana-lab
     async: false
+    if: build.env("DRY_RUN") == "false"
     build:
       branch: "${SVMKIT_BUILDKITE_BRANCH:-${BUILDKITE_BRANCH}}"
       env:
