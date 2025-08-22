@@ -17,7 +17,7 @@ format:
 	shfmt -w .githooks/*
 	shfmt -w .buildkite/*sh
 	shfmt -w tests/test-svmkit
-	shfmt -w bin/check-env
+	shfmt -w bin/{check-env,run-pipeline-steps}
 
 docker-run: docker-image
 	docker run --platform=linux/$(ARCH) $(TAG) start --tags "queue=$(USER)" --token "$(BUILDKITE_API_TOKEN)"

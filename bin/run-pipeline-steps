@@ -1,0 +1,56 @@
+#!/usr/bin/env opsh
+# shellcheck shell=bash
+
+: "${DRY_RUN:=false}"
+
+STEP_FILES=()
+
+check-steps() {
+    local ret=0
+    local fname
+
+    for step in "$@" ; do
+	fname="$SCRIPTDIR/../steps/$step.yml"
+	if [[ -f $fname ]] ; then
+	    STEP_FILES+=("$fname")
+	else
+	    log::error "step $step not found"
+	    ret=1
+	fi
+    done
+
+    return "$ret"
+}
+
+[[ $# -gt 0 ]] || log::fatal "steps must be provided to run"
+
+check-steps "$@" || log::fatal "missing steps; aborting pipeline generation"
+
+PIPELINE_YML=$(temp::file)
+
+cat > "$PIPELINE_YML" <<'EOF'
+x-default-agents: &default-agents
+  agents:
+    queue: "${AGENT_QUEUE:-default}"
+x-package-agents: &package-agents
+  agents:
+    queue: "${AGENT_QUEUE:-packages}"
+env:
+  AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-west-2}"
+  GOOGLE_PROJECT: "${GOOGLE_PROJECT:-svmkit}"
+  PULUMI_STACK_NAME: "svmkit/buildkite-${BUILDKITE_PIPELINE_SLUG}-${BUILDKITE_BUILD_NUMBER}"
+  DRY_RUN: "${DRY_RUN:-false}"
+
+steps:
+EOF
+
+cat "${STEP_FILES[@]}" >> "$PIPELINE_YML"
+
+
+
+if ! "$DRY_RUN" ; then
+    cat "$PIPELINE_YML" | buildkite-agent pipeline upload
+else
+    log::warn "dry run; not running the following steps:"
+    cat "$PIPELINE_YML"
+fi

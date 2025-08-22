@@ -1,0 +1,27 @@
+  - key: build-solana-packages
+    label: ":hammer_and_wrench: solana-packages"
+    <<: *package-agents
+    concurrency: 1
+    concurrency_group: sequential-steps
+    command: |
+      source ./lib/lib.bash
+
+      [[ -v REMOTE ]] || log::fatal "Must specify REMOTE"
+      [[ -v TAG ]] || log::fatal "Must specify TAG"
+
+      git::repos::add git@github.com:abklabs/svmkit
+      git::repos::add https://github.com/solana-labs/solana
+      git::repos::summary
+      git::repos::clone
+
+      # add the repos to git/config
+      cat ./solana-packages/git.config >> solana/.git/config
+
+      if ! $$DRY_RUN ; then
+        bk::group "Building packages for $$REMOTE $$TAG"
+        ( cd solana && ../svmkit/build/solana-build  "$$REMOTE" "$$TAG" )
+      else
+        bk::group "Skipping building pacakges"
+      fi
+    artifact_paths:
+      - build/*.deb

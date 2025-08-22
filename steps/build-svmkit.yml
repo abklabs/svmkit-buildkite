@@ -1,0 +1,35 @@
+  - key: build
+    label: ":hammer_and_wrench: Build svmkit and pulumi-svmkit"
+    if: build.env("SVMKIT_BRANCH") != null || build.env("PULUMI_SVMKIT_BRANCH") != null
+    <<: *default-agents
+    concurrency: 1
+    concurrency_group: sequential-steps
+    command: |
+      source ./lib/lib.bash
+
+      if [[ -v SVMKIT_BRANCH ]] ; then
+        git::repos::add git@github.com:abklabs/svmkit.git svmkit
+      fi
+
+      git::repos::add git@github.com:abklabs/pulumi-svmkit.git pulumi-svmkit
+      git::repos::summary
+      git::repos::clone
+
+      if [[ -v SVMKIT_BRANCH ]] ; then
+        bk::group "Building svmkit"
+        ( cd svmkit && make)
+      fi
+
+      bk::group "Building pulumi-svmkit"
+      (
+        cd pulumi-svmkit
+        if [[ -v SVMKIT_BRANCH ]] ; then
+          log::info "Patching pulumi-svmkit to use local svmkit"
+          ( cd provider && go mod edit -replace github.com/abklabs/svmkit/pkg=../../svmkit/pkg )
+        fi
+        make
+      )
+      tar -zcf pulumi-artifacts.tgz pulumi-svmkit/sdk pulumi-svmkit/bin
+
+    artifact_paths:
+      - pulumi-artifacts.tgz
