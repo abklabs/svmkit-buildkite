@@ -1,0 +1,36 @@
+  - key: solana-lab
+    label: ":test_tube: solana-lab"
+    <<: *default-agents
+    depends_on: ["build"]
+    concurrency: 1
+    concurrency_group: pulumi-testing
+
+    command: |
+      source ./lib/lib.bash
+
+      git::repos::add git@github.com:abklabs/solana-lab.git solana-lab
+      git::repos::add git@github.com:abklabs/tooling.git tooling
+      git::repos::summary
+      git::repos::clone
+
+      setup-aws-credentials
+      setup-gcp-credentials
+
+      PATH=$$(realpath ./tooling/bin):$$PATH
+      (
+        cd solana-lab
+        if [[ -v ARTIFACT_PATTERN ]]; then
+          [[ -v PARENT_BUILD_ID ]] || log::fatal "PARENT_BUILD_ID is required if ARTIFACT_PATTERN is provided"
+          bk::group "Getting Artifacts"
+          buildkite-agent artifact download "$ARTIFACT_PATTERN" . --build "$PARENT_BUILD_ID"
+        fi
+        bk::group "Setting up for Test Suite"
+        pulumi stack init "$$PULUMI_STACK_NAME"
+        pulumi stack select "$$PULUMI_STACK_NAME"
+        if ! $$DRY_RUN ; then
+          pulumi-install-and-run with-pulumi-up with-rpc-forwarded prove --ext .ts --ext .t test
+        else
+          log::info "Skipping bringing up pulumi"
+        fi
+        pulumi stack rm --yes
+      )
