@@ -1,6 +1,5 @@
 #!/usr/bin/env opsh
 # shellcheck shell=bash
-set -euo pipefail
 lib::import common
 git_opsh="${SCRIPTDIR}/../lib/git.opsh"
 
