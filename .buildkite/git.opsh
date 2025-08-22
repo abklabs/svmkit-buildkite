@@ -32,7 +32,7 @@ git::default-branch() {
 
 git::repos::get() {
 	if [[ $# -lt 2 ]]; then
-		log::error "Usage: ${FUNCNAME[0]} <repo> [url|dir|branch|options|ssh-secret]" >&2
+		log::error "Usage: ${FUNCNAME[0]} <repo> [url|dir|branch|options|ssh-secret]"
 		return 1
 	fi
 
