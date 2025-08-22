@@ -17,10 +17,12 @@
       PATH=$$(realpath ./tooling/bin):$$PATH
       (
         cd solana-lab
-        if [[ -v ARTIFACT_PATTERN ]]; then
-          [[ -v PARENT_BUILD_ID ]] || log::fatal "PARENT_BUILD_ID is required if ARTIFACT_PATTERN is provided"
+        bk::group "Searching for pipeline build package overrides"
+        if buildkite-agent artifact search 'build/*.deb' ; then
           bk::group "Getting Artifacts"
-          buildkite-agent artifact download "$ARTIFACT_PATTERN" . --build "$PARENT_BUILD_ID"
+          buildkite-agent artifact download build/*.deb . --build "${PARENT_BUILD_ID:-$BUILDKITE_BUILD_ID}"
+        else
+          bk::group "No Artifacts Found"
         fi
         bk::group "Setting up for Test Suite"
         pulumi stack init "$$PULUMI_STACK_NAME"
