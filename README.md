@@ -44,49 +44,57 @@ Options:
   -r, --repo <path>	Include the given repo (can be used multiple times)
 ```
 
-## Solana Packages (solana-packages.yml)
+## Running pipeline steps within buildkite
+
+Pipelines are built dynamically, based on individual steps. To upload a dynamic pipeline to Buildkite, do something like the following, e.g:
+
+```
+./bin/run-pipeline-steps build-solana-packages build-svmkit test-solana-lab cleanup-pulumi
+```
+
+Steps are run in the order specified on the command line.
+
+## Solana Packages (steps/build-solana-packages.yml)
+
 This pipeline builds Debian packages for the solana project using the
 svmkit/build/solana-build script.
 
 ### Environment Variable Configuration Options
 
+| Name             | Required | Description                                |
+| :--------------- | :------- | :----------------------------------------- |
+| `REMOTE`         | Y        | Specify the remote to build. e.g. anza-xyz |
+| `TAG`            | Y        | The tag to build e.g. v1.2.3               |
+| `TOOLING_BRANCH` | N        | git@github.com:abklabs/tooling branch      |
+
+## svmkit/pulumi-svmkit Build (steps/build-svmkit.yml)
+
+This pipeline builds pulumi-svmkit (and svmkit if needed) for local use within
+the build and testing pipeline.
+
+### Environment Variable Configuration Options
+
 | Name                   | Required | Description                                 |
-|:-----------------------|:---------|:--------------------------------------------|
-| `REMOTE`               | Y        | Specify the remote to build. e.g. anza-xyz  |
-| `TAG`                  | Y        | The tag to build e.g. v1.2.3                |
+| :--------------------- | :------- | :------------------------------------------ |
+| `TOOLING_BRANCH`       | N        | git@github.com:abklabs/tooling branch       |
 | `SVMKIT_BRANCH`        | N        | git@github.com:abklabs/svmkit branch        |
 | `PULUMI_SVMKIT_BRANCH` | N        | git@github.com:abklabs/pulumi-svmkit branch |
-| `TOOLING_BRANCH`       | N        | git@github.com:abklabs/tooling branch       |
-| `SOLANA_LAB_BRANCH`    | N        | git@github.com:abklabs/solana-lab branch    |
 
-## Solana Lab (solana-packages.yml)
+## Solana Lab (steps/test-solana-lab.yml)
+
 This pipeline instantiates a Solana Lab instances
 (git@github.com:abklabs/solana-lab) and performs TAP tests defined in
 git@github.com:abklabs/solana-lab/test
 
 ### Environment Variable Configuration Options
-| Name                   | Required | Description                                 |
-|:-----------------------|:---------|:--------------------------------------------|
-| `SVMKIT_BRANCH`        | N        | git@github.com:abklabs/svmkit branch        |
-| `PULUMI_SVMKIT_BRANCH` | N        | git@github.com:abklabs/pulumi-svmkit branch |
-| `TOOLING_BRANCH`       | N        | git@github.com:abklabs/tooling branch       |
-| `SOLANA_LAB_BRANCH`    | N        | git@github.com:abklabs/solana-lab branch    |
-| `PARENT_BUILD_ID`      | N        | Buildkite build id for artifacts            |
-| `ARTIFACT_PATTERN`     | N        | Artifacts to download                       |
 
+| Name                | Required | Description                              |
+| :------------------ | :------- | :--------------------------------------- |
+| `TOOLING_BRANCH`    | N        | git@github.com:abklabs/tooling branch    |
+| `SOLANA_LAB_BRANCH` | N        | git@github.com:abklabs/solana-lab branch |
+| `PARENT_BUILD_ID`   | N        | Buildkite build id for artifacts         |
 
-## SVMKit Examples (svmit-examples.yml)
-This pipeline is designed to build SVMKit and the Pulumi provider and
-run example cloud instantiations in AWS and GCP.
-
-### `TEST_NAMES`
- * `test-gcp-validator-agave-ts`
- * `test-aws-network-spe-py`
- * `test-gcp-network-spe-ts`
- * `test-aws-validator-agave-ts`
- * `test-aws-validator-fd-ts`
- * `test-aws-validator-xen-ts`
- * `test-gcp-validator-agave-ts`
+## Credential Information
 
 ### Notes on Google Cloud
 
