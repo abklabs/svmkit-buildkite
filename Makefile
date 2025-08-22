@@ -9,7 +9,7 @@ DOCKERFILE 	?=	Dockerfile
 check: lint
 
 lint:
-	shellcheck -P .githooks .buildkite/*sh
+	shellcheck -P .githooks lib/*sh
 	shfmt -d .githooks/*
 	shfmt -d bin/check-env
 

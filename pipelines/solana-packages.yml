@@ -8,7 +8,7 @@ steps:
     <<: *default-agents
 
     command: |
-      source .buildkite/lib.bash
+      source ./lib/lib.bash
 
       [[ -v REMOTE ]] || log::fatal "Must specify REMOTE"
       [[ -v TAG ]] || log::fatal "Must specify TAG"
@@ -19,7 +19,7 @@ steps:
       git::repos::clone
 
       # add the repos to git/config
-      cat .buildkite/solana-packages/git.config >> solana/.git/config
+      cat ./solana-packages/git.config >> solana/.git/config
 
       bk::group "Building packages for $$REMOTE $$TAG"
       ( cd solana && ../svmkit/build/solana-build  "$$REMOTE" "$$TAG" )
