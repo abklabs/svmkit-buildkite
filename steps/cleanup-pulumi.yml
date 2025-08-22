@@ -24,6 +24,3 @@
         cd solana-lab
         pulumi-install-and-run cleanup-pulumi-stack "$$PULUMI_STACK_NAME"
       )
-
-    depends_on: ["solana-lab"]
-    allow_dependency_failure: true
