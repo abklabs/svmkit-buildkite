@@ -27,6 +27,12 @@
         bk::group "Setting up for Test Suite"
         pulumi stack init "$$PULUMI_STACK_NAME"
         pulumi stack select "$$PULUMI_STACK_NAME"
+
+        if [[ -d build ]] ; then
+          log::info "Configuring local stack to use 'build' as a package override directory"
+          pulumi config set packageConfig:overrideDir build
+        fi
+
         if ! $$DRY_RUN ; then
           pulumi-install-and-run with-pulumi-up with-rpc-forwarded prove --ext .ts --ext .t test
         else
