@@ -1,4 +1,4 @@
-# SVMkit Buildkite Pipelines
+# SVMKit Buildkite Pipelines
 
 This repository contains Buildkite pipelines for building and testing
 SVMKit.
@@ -56,7 +56,7 @@ Steps are run in the order specified on the command line.
 
 ## Solana Packages (steps/build-solana-packages.yml)
 
-This pipeline builds Debian packages for the solana project using the
+This pipeline builds Debian packages of different Solana validators using the
 svmkit/build/solana-build script.
 
 ### Environment Variable Configuration Options
